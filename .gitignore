@@ -43,3 +43,26 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+
+# 1. Jangan bawa file Database Lokal (Kalau nanti pakai SQLite/Hive)
+*.db
+*.sqlite
+*.sqlite3
+*.hive
+
+# 2. Jangan bawa file Environment (Kunci API rahasia)
+.env
+.env.*
+
+# 3. Jangan bawa Kunci Brankas Play Store (SANGAT KRUSIAL UNTUK NANTI)
+*.jks
+*.keystore
+key.properties
+
+# 4. File konfigurasi rahasia Firebase (Kalau nanti pakai Firebase)
+google-services.json
+GoogleService-Info.plist
+
+# 5. File Export Database (Haram masuk GitHub)
+*.sql
