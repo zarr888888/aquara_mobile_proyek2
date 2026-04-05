@@ -2,6 +2,7 @@ import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class ApiService {
   final String baseUrl = 'http://192.168.43.63:8000/api'; 
@@ -273,6 +274,48 @@ class ApiService {
     }
   }
 
+// FUNGSI LOGIN GOOGLE (UPDATE VERSI 7.2+)
+  Future<Map<String, dynamic>> loginWithGoogle() async {
+    try {
+      final googleSignIn = GoogleSignIn.instance;
+      
+      await googleSignIn.initialize(
+        serverClientId: '525481370217-qpvpucpi0qbttmrf5knk34a86nqs9ips.apps.googleusercontent.com',
+      );
+
+      await googleSignIn.signOut();
+
+      final googleUser = await googleSignIn.authenticate();
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/google-login'),
+        body: {
+          'email': googleUser.email,
+          'name': googleUser.displayName ?? 'Pengguna AQUARA',
+          'google_id': googleUser.id,
+        },
+      );
+
+      var data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setString('token', data['token']);
+        await prefs.setString('user_name', data['data']['name']); 
+        
+        await prefs.setString('user_id', data['data']['id'].toString());
+        await prefs.setString('foto_profil', data['data']['foto_profil'] ?? "");
+        
+        return {'success': true, 'message': data['message'] ?? 'Login Berhasil'};
+      } else {
+        return {'success': false, 'message': 'Gagal sinkronisasi dengan server'};
+      }
+    } catch (e) {
+      print("Error Google Sign In: $e");
+      return {'success': false, 'message': 'Terjadi kesalahan sistem.'};
+    }
+  }
+
   Future<Map<String, dynamic>> changePassword(String oldPassword, String newPassword) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -468,6 +511,54 @@ class ApiService {
     } catch (e) {
       print("Error updatePasarItem: $e");
       return false;
+    }
+  }
+
+  // FUNGSI LOGIN WHATSAPP (OTP FONNTE)
+  Future<Map<String, dynamic>> sendOtpWa(String phone) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/send-otp-wa'),
+        body: {'phone': phone},
+      );
+      
+      var data = jsonDecode(response.body);
+      
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message']};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Gagal mengirim OTP'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Terjadi kesalahan jaringan: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyOtpWa(String phone, String otp) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/verify-otp-wa'),
+        body: {
+          'phone': phone,
+          'otp': otp,
+        },
+      );
+      
+      var data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setString('token', data['token']);
+        await prefs.setString('user_name', data['data']['name']);
+        await prefs.setString('user_id', data['data']['id'].toString());
+        await prefs.setString('foto_profil', data['data']['foto_profil'] ?? "");
+
+        return {'success': true, 'message': 'Login WhatsApp Berhasil'};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Kode OTP salah atau kadaluarsa'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Terjadi kesalahan jaringan: $e'};
     }
   }
 }

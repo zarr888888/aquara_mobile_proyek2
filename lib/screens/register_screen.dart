@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import 'home_screen.dart';
 import 'syarat_ketentuan_screen.dart';
+import 'otp_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -51,6 +52,86 @@ class _RegisterScreenState extends State<RegisterScreen> {
         SnackBar(content: Text(result['message']), backgroundColor: Colors.red),
       );
     }
+  }
+
+  // Fungsi untuk memunculkan pop-up input nomor WA
+  void _showPhoneInputDialog(BuildContext context) {
+    TextEditingController phoneWaController = TextEditingController();
+    bool isSending = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              title: const Text('Login WhatsApp', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Masukkan nomor WhatsApp Anda untuk menerima kode OTP.'),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: phoneWaController,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      hintText: 'Contoh: 08xxxxxxxxx',
+                      prefixIcon: const Icon(Icons.phone),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                  onPressed: isSending ? null : () async {
+                    if (phoneWaController.text.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Nomor WA tidak boleh kosong!'))
+                      );
+                      return;
+                    }
+
+                    setState(() => isSending = true);
+
+                    var response = await ApiService().sendOtpWa(phoneWaController.text);
+
+                    setState(() => isSending = false);
+
+                    if (response['success']) {
+                      Navigator.pop(context); 
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(response['message'], style: const TextStyle(color: Colors.white)), backgroundColor: Colors.green)
+                      );
+                      
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => OtpScreen(phone: phoneWaController.text),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(response['message']), backgroundColor: Colors.red)
+                      );
+                    }
+                  },
+                  child: isSending 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                      : const Text('Kirim OTP', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          }
+        );
+      },
+    );
   }
 
   @override
@@ -122,8 +203,94 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           : Text("DAFTAR SEKARANG", style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                     ),
                   ),
+                  const SizedBox(height: 30),
 
-                        const SizedBox(height: 30),
+                Row(
+                    children: [
+                      Expanded(child: Divider(thickness: 1, color: Colors.grey.shade300)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          "Metode login lainnya",
+                          style: TextStyle(color: Colors.grey.shade500),
+                        ),
+                      ),
+                      Expanded(child: Divider(thickness: 1, color: Colors.grey.shade300)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  OutlinedButton(
+                    onPressed: () {
+                      _showPhoneInputDialog(context);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      side: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.asset('assets/icons/whatsapp.png', height: 24), 
+                        const SizedBox(width: 12),
+                        const Text(
+                          "Masuk dengan WhatsApp",
+                          style: TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  OutlinedButton(
+                        onPressed: () async {
+                      var result = await ApiService().loginWithGoogle();
+                      
+                      if (result['success'] == true) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(result['message']), 
+                            backgroundColor: Colors.green
+                          ),
+                        );
+                        
+                        Navigator.pushReplacement(
+                          context, 
+                          MaterialPageRoute(builder: (context) => const HomeScreen()), 
+                        ); 
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(result['message']), 
+                            backgroundColor: Colors.red
+                          ),
+                        );
+                      }
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      side: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.asset('assets/icons/google.png', height: 24),
+                        const SizedBox(width: 12),
+                        const Text(
+                          "Masuk dengan Google",
+                          style: TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  
                   Wrap(
                     alignment: WrapAlignment.center,
                     children: [
