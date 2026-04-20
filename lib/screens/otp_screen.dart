@@ -2,11 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart'; 
 import 'home_screen.dart';
+import 'login_screen.dart';
 
 class OtpScreen extends StatefulWidget {
   final String phone; 
+  final bool isRegistration; 
+  final bool isResetPassword;
+  final String newPassword; 
 
-  const OtpScreen({super.key, required this.phone}); 
+  const OtpScreen({
+    super.key, 
+    required this.phone, 
+    this.isRegistration = false,
+    this.isResetPassword = false,
+    this.newPassword = "",
+  }); 
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -21,54 +31,60 @@ class _OtpScreenState extends State<OtpScreen> {
 
   @override
   void dispose() {
-    for (var controller in _controllers) {
-      controller.dispose();
-    }
-    for (var node in _focusNodes) {
-      node.dispose();
-    }
+    for (var controller in _controllers) { controller.dispose(); }
+    for (var node in _focusNodes) { node.dispose(); }
     super.dispose();
   }
 
   Future<void> _verifyOtp() async {
     String otpCode = _controllers.map((c) => c.text).join();
-    
     if (otpCode.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Masukkan 6 digit OTP lengkap!'), backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Masukkan 6 digit OTP!'), backgroundColor: Colors.red));
       return;
     }
 
     setState(() => _isLoading = true);
 
-    var result = await ApiService().verifyOtpWa(widget.phone, otpCode);
+    Map<String, dynamic> result;
+    if (widget.isResetPassword) {
+      result = await ApiService().resetPasswordWithOtp(widget.phone, otpCode, widget.newPassword);
+    } else if (widget.isRegistration) {
+      result = await ApiService().verifyRegistrationOtp(widget.phone, otpCode);
+    } else {
+      result = await ApiService().verifyOtpWa(widget.phone, otpCode);
+    }
 
     setState(() => _isLoading = false);
 
+    if (!context.mounted) return;
+
     if (result['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result['message']), backgroundColor: Colors.green),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.green));
       
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-        (route) => false,
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result['message']), backgroundColor: Colors.red),
-      );
-      for (var c in _controllers) {
-        c.clear();
+      if (widget.isResetPassword) {
+        Navigator.pushAndRemoveUntil(
+          context, 
+          MaterialPageRoute(builder: (context) => const LoginScreen()), 
+          (route) => false
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context, 
+          MaterialPageRoute(builder: (context) => const HomeScreen()), 
+          (route) => false
+        );
       }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.red));
+      for (var c in _controllers) { c.clear(); }
       _focusNodes[0].requestFocus(); 
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    String targetText = widget.phone.contains('@') ? "Email" : "WhatsApp";
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -95,7 +111,7 @@ class _OtpScreenState extends State<OtpScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "Kami telah mengirimkan 6 digit kode OTP ke WhatsApp\n${widget.phone}.\nSilakan masukkan di bawah ini.",
+                  "Kami telah mengirimkan 6 digit kode OTP ke $targetText\n${widget.phone}.\nSilakan masukkan di bawah ini.",
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
@@ -134,8 +150,21 @@ class _OtpScreenState extends State<OtpScreen> {
                     GestureDetector(
                       onTap: _isResending ? null : () async {
                         setState(() => _isResending = true);
-                        var response = await ApiService().sendOtpWa(widget.phone);
+
+                        Map<String, dynamic> response; 
+                        String method = widget.phone.contains('@') ? 'email' : 'wa';
+                        
+                        if (widget.isResetPassword) {
+                          response = await ApiService().requestResetOtp(widget.phone, method);
+                        } else if (widget.isRegistration) {
+                          response = await ApiService().requestRegistrationOtp(widget.phone, method);
+                        } else {
+                          response = await ApiService().sendOtpWa(widget.phone);
+                        }
+                        
                         setState(() => _isResending = false);
+
+                        if (!context.mounted) return;
                         
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(

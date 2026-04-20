@@ -15,6 +15,7 @@ import 'login_screen.dart';
 import 'profil_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'semua_komoditas_screen.dart';
+import 'notifikasi_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -175,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   GestureDetector(
                     onTap: () {
                       if (_isLoggedIn) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Belum ada notifikasi baru untuk Anda.")));
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const NotifikasiScreen()));
                       } else {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
                       }

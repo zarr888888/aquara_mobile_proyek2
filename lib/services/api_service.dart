@@ -241,9 +241,7 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/register'),
-        headers: {
-          'Accept': 'application/json',
-        },
+        headers: {'Accept': 'application/json'},
         body: {
           'name': name,
           'email': email,
@@ -252,25 +250,66 @@ class ApiService {
         },
       );
 
+      var data = json.decode(response.body);
+
       if (response.statusCode == 201 || response.statusCode == 200) {
-        var data = json.decode(response.body);
+        return {'success': true, 'message': 'Pendaftaran berhasil. Silakan verifikasi OTP.'};
+      } 
+      else if (response.statusCode == 422) {
+        return {'success': false, 'message': 'Email atau Nomor HP sudah terdaftar.'};
+      } 
+      else {
+        return {'success': false, 'message': data['message'] ?? 'Gagal mendaftar.'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Terjadi kesalahan jaringan.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> requestRegistrationOtp(String loginId, String method) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/register/send-otp'),
+        body: {
+          'login_id': loginId,
+          'method': method,
+        },
+      );
+      var data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message']};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Gagal mengirim OTP'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Terjadi kesalahan jaringan.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyRegistrationOtp(String loginId, String otp) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/register/verify-otp'),
+        body: {
+          'login_id': loginId,
+          'otp': otp,
+        },
+      );
+      var data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
         SharedPreferences prefs = await SharedPreferences.getInstance();
         await prefs.setString('token', data['token']);
         await prefs.setString('user_name', data['data']['name']);
         await prefs.setString('user_id', data['data']['id'].toString());
-
         await prefs.setString('foto_profil', data['data']['foto_profil'] ?? "");
-        
-        return {'success': true, 'message': 'Pendaftaran Berhasil'};
-      } 
-      else if (response.statusCode == 422) {
-        return {'success': false, 'message': 'Email atau Nomor HP sudah terdaftar. Mohon gunakan yang berbeda.'};
-      } 
-      else {
-        return {'success': false, 'message': 'Gagal mendaftar. Pastikan data sudah benar.'};
+
+        return {'success': true, 'message': 'Verifikasi Berhasil!'};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Kode OTP salah/kadaluarsa'};
       }
     } catch (e) {
-      return {'success': false, 'message': 'Terjadi kesalahan jaringan, periksa koneksi Anda.'};
+      return {'success': false, 'message': 'Terjadi kesalahan jaringan.'};
     }
   }
 
@@ -350,53 +389,60 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> ubahKontak(String email, String phone) async {
+  // FUNGSI MINTA OTP UBAH KONTAK & HAPUS AKUN
+  Future<Map<String, dynamic>> requestUbahKontakOtp(String targetContact, String method) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('token');
-      if (token == null) return {'success': false, 'message': 'Anda belum login'};
-
       final response = await http.post(
-        Uri.parse('$baseUrl/ubah-kontak'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-        body: {
-          'email': email,
-          'phone': phone,
-        },
+        Uri.parse('$baseUrl/ubah-kontak/send-otp'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+        body: {'target_contact': targetContact, 'method': method},
       );
-
-      var data = json.decode(response.body);
-      if (response.statusCode == 200) {
-        return {'success': true, 'message': data['message'] ?? 'Kontak berhasil diperbarui!'};
-      } else {
-        return {'success': false, 'message': data['message'] ?? 'Gagal memperbarui, Email/No HP mungkin sudah dipakai.'};
-      }
-    } catch (e) {
-      return {'success': false, 'message': 'Terjadi kesalahan jaringan: $e'};
-    }
+      return {'success': response.statusCode == 200, 'message': jsonDecode(response.body)['message']};
+    } catch (e) { return {'success': false, 'message': 'Kesalahan jaringan.'}; }
   }
 
-  Future<bool> hapusAkun() async {
+  Future<Map<String, dynamic>> requestHapusAkunOtp(String method) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('token');
-      if (token == null) return false;
+      final response = await http.post(
+        Uri.parse('$baseUrl/hapus-akun/send-otp'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+        body: {'method': method},
+      );
+      return {'success': response.statusCode == 200, 'message': jsonDecode(response.body)['message']};
+    } catch (e) { return {'success': false, 'message': 'Kesalahan jaringan.'}; }
+  }
 
+  // UPDATE FUNGSI UBAH KONTAK (SEKARANG BUTUH OTP)
+  Future<Map<String, dynamic>> ubahKontak(String email, String phone, String otp) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('token');
+      final response = await http.post(
+        Uri.parse('$baseUrl/ubah-kontak'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+        body: {'email': email, 'phone': phone, 'otp': otp},
+      );
+      var data = json.decode(response.body);
+      return {'success': response.statusCode == 200, 'message': data['message'] ?? 'Gagal memperbarui.'};
+    } catch (e) { return {'success': false, 'message': 'Kesalahan jaringan: $e'}; }
+  }
+
+  // UPDATE FUNGSI HAPUS AKUN (SEKARANG BUTUH OTP)
+  Future<bool> hapusAkun(String otp) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('token');
       final response = await http.delete(
         Uri.parse('$baseUrl/hapus-akun'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+        body: {'otp': otp}, // Kirim OTP
       );
-
       return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
 
   Future<Map<String, dynamic>> updateProfile(String name, String fokusBudidaya, File? fotoProfil) async {
@@ -561,4 +607,46 @@ class ApiService {
       return {'success': false, 'message': 'Terjadi kesalahan jaringan: $e'};
     }
   }
+
+  // FUNGSI API LUPA PASSWORD
+  Future<Map<String, dynamic>> requestResetOtp(String loginId, String method) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/lupa-password/send-otp'),
+        body: {'login_id': loginId, 'method': method},
+      );
+      var data = jsonDecode(response.body);
+      return {'success': response.statusCode == 200, 'message': data['message'] ?? 'Gagal mengirim OTP'};
+    } catch (e) {
+      return {'success': false, 'message': 'Terjadi kesalahan jaringan.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> resetPasswordWithOtp(String loginId, String otp, String newPassword) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/lupa-password/verify'),
+        body: {'login_id': loginId, 'otp': otp, 'new_password': newPassword},
+      );
+      var data = jsonDecode(response.body);
+      return {'success': response.statusCode == 200, 'message': data['message'] ?? 'Kode OTP salah/kadaluarsa'};
+    } catch (e) {
+      return {'success': false, 'message': 'Terjadi kesalahan jaringan.'};
+    }
+  }
+
+  Future<List<dynamic>> fetchNotifications() async {
+  try {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? token = prefs.getString('token');
+    final response = await http.get(
+      Uri.parse('$baseUrl/notifications'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body)['data'];
+    }
+    return [];
+  } catch (e) { return []; }
+}
 }

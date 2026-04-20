@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import 'bantuan_screen.dart';
 import 'syarat_ketentuan_screen.dart';
 import 'tentang_aquara_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class PengaturanScreen extends StatefulWidget {
   const PengaturanScreen({Key? key}) : super(key: key);
@@ -58,31 +59,11 @@ class _PengaturanScreenState extends State<PengaturanScreen> {
                   title: Text("Hapus Akun Permanen?", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.red)),
                   content: Text("Semua data tambak, forum, dan profil Anda akan hilang. Apakah Anda yakin?", style: GoogleFonts.poppins()),
                   actions: [
+                    TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Batal", style: TextStyle(color: Colors.grey))),
                     TextButton(
-                      onPressed: () => Navigator.pop(dialogContext), 
-                      child: const Text("Batal", style: TextStyle(color: Colors.grey))
-                    ),
-                    TextButton(
-                      onPressed: () async {
+                      onPressed: () {
                         Navigator.pop(dialogContext); 
-                        
-                        bool success = await ApiService().hapusAkun();
-                        
-                        if (success) {
-                          SharedPreferences prefs = await SharedPreferences.getInstance();
-                          await prefs.clear();
-                          
-                          if (!mounted) return;
-                          Navigator.pushAndRemoveUntil(
-                            context, 
-                            MaterialPageRoute(builder: (context) => const HomeScreen()), 
-                            (route) => false 
-                          );
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Akun berhasil dihapus permanen"), backgroundColor: Colors.red));
-                        } else {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal menghapus akun. Coba lagi."), backgroundColor: Colors.orange));
-                        }
+                        _showDeleteOtpMethodDialog(context);
                       }, 
                       child: const Text("Ya, Hapus", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
                     ),
@@ -117,8 +98,28 @@ class _PengaturanScreenState extends State<PengaturanScreen> {
               secondary: const Icon(Icons.notifications_active_outlined, color: Colors.black87),
               title: Text("Notifikasi Info Pasar", style: GoogleFonts.poppins(fontSize: 14)),
               value: _isNotifOn,
-              onChanged: (value) {
+              onChanged: (value) async {
                 setState(() => _isNotifOn = value);
+                
+                if (value) {
+                  try {
+                    await FirebaseMessaging.instance.subscribeToTopic("info_pasar");
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Anda akan menerima notifikasi Info Pasar."), backgroundColor: Colors.green));
+                  } catch (e) {
+                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal mengaktifkan notifikasi."), backgroundColor: Colors.red));
+                     setState(() => _isNotifOn = false);
+                  }
+                } 
+                else {
+                  try {
+                    await FirebaseMessaging.instance.unsubscribeFromTopic("info_pasar");
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Notifikasi Info Pasar dimatikan."), backgroundColor: Colors.orange));
+                  } catch (e) {
+                     setState(() => _isNotifOn = true);
+                  }
+                }
               },
             ),
           ]),
@@ -187,5 +188,130 @@ class _PengaturanScreenState extends State<PengaturanScreen> {
 
   void _showDevSnackBar(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fitur ini sedang dalam tahap pengembangan!")));
+  }
+
+  void _showDeleteOtpMethodDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) {
+        bool isSending = false;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text("Verifikasi Keamanan", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
+                  const SizedBox(height: 8),
+                  const Text("Pilih metode pengiriman OTP untuk menghapus akun Anda:", textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  if (isSending) const CircularProgressIndicator(color: Colors.red)
+                  else ...[
+                    ListTile(
+                      leading: Image.asset('assets/icons/whatsapp.png', height: 24),
+                      title: const Text("Kirim OTP ke WhatsApp Terdaftar"),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.grey.shade300)),
+                      onTap: () async {
+                        setModalState(() => isSending = true);
+                        var res = await ApiService().requestHapusAkunOtp('wa');
+                        if (!context.mounted) return;
+                        setModalState(() => isSending = false);
+                        
+                        if (res['success']) {
+                          Navigator.pop(context);
+                          _showDeleteOtpInputDialog(context);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']), backgroundColor: Colors.red));
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    ListTile(
+                      leading: const Icon(Icons.email, color: Color(0xFF009FE3)),
+                      title: const Text("Kirim OTP ke Email Terdaftar"),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.grey.shade300)),
+                      onTap: () async {
+                        setModalState(() => isSending = true);
+                        var res = await ApiService().requestHapusAkunOtp('email');
+                        if (!context.mounted) return;
+                        setModalState(() => isSending = false);
+                        
+                        if (res['success']) {
+                          Navigator.pop(context);
+                          _showDeleteOtpInputDialog(context);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']), backgroundColor: Colors.red));
+                        }
+                      },
+                    ),
+                  ]
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
+  }
+
+  void _showDeleteOtpInputDialog(BuildContext context) {
+    TextEditingController otpController = TextEditingController();
+    bool isVerifying = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text("Masukkan OTP", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.red)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("Masukkan 6 digit kode OTP untuk konfirmasi penghapusan permanen."),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: otpController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 24, letterSpacing: 5, fontWeight: FontWeight.bold, color: Colors.red),
+                    decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: isVerifying ? null : () async {
+                    if (otpController.text.length < 6) return;
+                    setDialogState(() => isVerifying = true);
+                    
+                    bool success = await ApiService().hapusAkun(otpController.text);
+                    if (!context.mounted) return;
+                    setDialogState(() => isVerifying = false);
+
+                    if (success) {
+                      SharedPreferences prefs = await SharedPreferences.getInstance();
+                      await prefs.clear();
+                      
+                      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const HomeScreen()), (route) => false);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Akun Anda telah musnah selamanya."), backgroundColor: Colors.black));
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Kode OTP Salah! Gagal menghapus akun."), backgroundColor: Colors.red));
+                    }
+                  },
+                  child: isVerifying ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(color: Colors.white)) : const Text("HANCURKAN AKUN", style: TextStyle(color: Colors.white)),
+                )
+              ],
+            );
+          }
+        );
+      }
+    );
   }
 }

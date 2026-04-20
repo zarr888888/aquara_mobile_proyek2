@@ -6,6 +6,7 @@ import 'register_screen.dart';
 import 'syarat_ketentuan_screen.dart';
 import 'ganti_password_screen.dart';
 import 'otp_screen.dart';
+import 'lupa_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -203,7 +204,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const LupaPasswordScreen()));
+                      },
                       child: Text("Lupa Password?", style: GoogleFonts.poppins(color: indramayuBlue, fontWeight: FontWeight.w600)),
                     ),
                   ),

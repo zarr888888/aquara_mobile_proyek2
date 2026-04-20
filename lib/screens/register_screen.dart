@@ -29,10 +29,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
 
+    final email = _emailController.text.trim();
+    final phone = _phoneController.text.trim();
+
     final result = await _apiService.registerUser(
       _nameController.text.trim(),
-      _emailController.text.trim(),
-      _phoneController.text.trim(),
+      email,
+      phone,
       _passwordController.text,
     );
 
@@ -40,13 +43,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (result['success']) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Pendaftaran Berhasil!"), backgroundColor: Colors.green),
+        SnackBar(content: Text(result['message']), backgroundColor: Colors.green),
       );
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-        (route) => false,
-      );
+      _showOtpMethodDialog(context, email, phone);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result['message']), backgroundColor: Colors.red),
@@ -54,7 +53,96 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  // Fungsi untuk memunculkan pop-up input nomor WA
+  // FUNGSI MEMUNCULKAN POP-UP PILIHAN METODE OTP (WA / EMAIL)
+  void _showOtpMethodDialog(BuildContext context, String email, String phone) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        bool isSending = false;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+                  const SizedBox(height: 24),
+                  Text("Pilih Metode Verifikasi", style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  const SizedBox(height: 8),
+                  Text("Ke mana kami harus mengirimkan kode OTP 6 digit rahasia Anda?", textAlign: TextAlign.center, style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600])),
+                  const SizedBox(height: 24),
+                  
+                  if (isSending) 
+                    const Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Center(child: CircularProgressIndicator(color: Color(0xFF009FE3))),
+                    )
+                  else ...[
+                    // OPSI 1: WHATSAPP
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade300)),
+                      leading: Image.asset('assets/icons/whatsapp.png', height: 32),
+                      title: Text("Kirim via WhatsApp", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                      subtitle: Text(phone),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () async {
+                        setModalState(() => isSending = true);
+                        var res = await _apiService.requestRegistrationOtp(phone, 'wa');
+                        setModalState(() => isSending = false);
+                        
+                        if (res['success']) {
+                          Navigator.pop(context); 
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => OtpScreen(phone: phone, isRegistration: true)));
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']), backgroundColor: Colors.red));
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // OPSI 2: EMAIL
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade300)),
+                      leading: const Icon(Icons.email, color: Color(0xFF009FE3), size: 32),
+                      title: Text("Kirim via Email", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                      subtitle: Text(email.isNotEmpty ? email : "Email tidak diisi"),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () async {
+                        if (email.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Anda tidak mengisi email saat pendaftaran!"), backgroundColor: Colors.red));
+                          return;
+                        }
+                        setModalState(() => isSending = true);
+                        var res = await _apiService.requestRegistrationOtp(email, 'email');
+                        setModalState(() => isSending = false);
+                        
+                        if (res['success']) {
+                          Navigator.pop(context); 
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => OtpScreen(phone: email, isRegistration: true))); 
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']), backgroundColor: Colors.red));
+                        }
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
+  }
+
+  // Fungsi untuk Login WhatsApp Langsung
   void _showPhoneInputDialog(BuildContext context) {
     TextEditingController phoneWaController = TextEditingController();
     bool isSending = false;
@@ -97,11 +185,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       );
                       return;
                     }
-
                     setState(() => isSending = true);
-
                     var response = await ApiService().sendOtpWa(phoneWaController.text);
-
                     setState(() => isSending = false);
 
                     if (response['success']) {
@@ -109,13 +194,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text(response['message'], style: const TextStyle(color: Colors.white)), backgroundColor: Colors.green)
                       );
-                      
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => OtpScreen(phone: phoneWaController.text),
-                        ),
-                      );
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => OtpScreen(phone: phoneWaController.text)));
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text(response['message']), backgroundColor: Colors.red)
