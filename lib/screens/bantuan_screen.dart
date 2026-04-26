@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class BantuanScreen extends StatelessWidget {
-  const BantuanScreen({Key? key}) : super(key: key);
+  const BantuanScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

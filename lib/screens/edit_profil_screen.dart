@@ -8,7 +8,7 @@ class EditProfilScreen extends StatefulWidget {
   final String currentName;
   final String currentFokus;
 
-  const EditProfilScreen({Key? key, required this.currentName, required this.currentFokus}) : super(key: key);
+  const EditProfilScreen({super.key, required this.currentName, required this.currentFokus});
 
   @override
   _EditProfilScreenState createState() => _EditProfilScreenState();
@@ -54,6 +54,7 @@ class _EditProfilScreenState extends State<EditProfilScreen> {
 
     setState(() => _isLoading = false);
 
+    if (!mounted) return;
     if (result['success']) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profil Berhasil Diperbarui!"), backgroundColor: Colors.green));
       Navigator.pop(context, true);

@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 
 class UbahKontakScreen extends StatefulWidget {
-  const UbahKontakScreen({Key? key}) : super(key: key);
+  const UbahKontakScreen({super.key});
   @override
   State<UbahKontakScreen> createState() => _UbahKontakScreenState();
 }
@@ -13,7 +13,7 @@ class _UbahKontakScreenState extends State<UbahKontakScreen> {
   final ApiService _apiService = ApiService();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  bool _isLoading = false;
+  final bool _isLoading = false;
 
   void _showOtpMethodDialog() {
     if (!_formKey.currentState!.validate()) return;

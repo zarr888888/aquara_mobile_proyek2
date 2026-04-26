@@ -73,7 +73,8 @@ class _EditJualanScreenState extends State<EditJualanScreen> {
     );
 
     setState(() => _isLoading = false);
-
+    
+    if (!mounted) return;
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jualan berhasil diperbarui!')));
       Navigator.pop(context, true); 

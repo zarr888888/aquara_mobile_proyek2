@@ -4,7 +4,7 @@ import '../services/api_service.dart';
 import 'otp_screen.dart';
 
 class LupaPasswordScreen extends StatefulWidget {
-  const LupaPasswordScreen({Key? key}) : super(key: key);
+  const LupaPasswordScreen({super.key});
 
   @override
   _LupaPasswordScreenState createState() => _LupaPasswordScreenState();

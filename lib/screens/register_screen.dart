@@ -6,7 +6,7 @@ import 'syarat_ketentuan_screen.dart';
 import 'otp_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({Key? key}) : super(key: key);
+  const RegisterScreen({super.key});
 
   @override
   _RegisterScreenState createState() => _RegisterScreenState();
@@ -41,6 +41,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = false);
 
+    if (!mounted) return;
     if (result['success']) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result['message']), backgroundColor: Colors.green),
@@ -95,7 +96,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         setModalState(() => isSending = true);
                         var res = await _apiService.requestRegistrationOtp(phone, 'wa');
                         setModalState(() => isSending = false);
-                        
+
+                        if (!context.mounted) return;
                         if (res['success']) {
                           Navigator.pop(context); 
                           Navigator.push(context, MaterialPageRoute(builder: (_) => OtpScreen(phone: phone, isRegistration: true)));
@@ -122,7 +124,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         setModalState(() => isSending = true);
                         var res = await _apiService.requestRegistrationOtp(email, 'email');
                         setModalState(() => isSending = false);
-                        
+
+                        if (!context.mounted) return;
                         if (res['success']) {
                           Navigator.pop(context); 
                           Navigator.push(context, MaterialPageRoute(builder: (_) => OtpScreen(phone: email, isRegistration: true))); 
@@ -189,6 +192,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     var response = await ApiService().sendOtpWa(phoneWaController.text);
                     setState(() => isSending = false);
 
+                    if (!context.mounted) return;
                     if (response['success']) {
                       Navigator.pop(context); 
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -328,6 +332,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         onPressed: () async {
                       var result = await ApiService().loginWithGoogle();
                       
+                      if (!context.mounted) return;
                       if (result['success'] == true) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(

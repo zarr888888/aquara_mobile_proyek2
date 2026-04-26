@@ -7,7 +7,7 @@ import 'forum_screen.dart';
 import 'consultation_screen.dart';
 
 class NotifikasiScreen extends StatefulWidget {
-  const NotifikasiScreen({Key? key}) : super(key: key);
+  const NotifikasiScreen({super.key});
   @override
   State<NotifikasiScreen> createState() => _NotifikasiScreenState();
 }
@@ -99,7 +99,7 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
                 ),
               ),
             );
-             },
+              },
           );
         },
       ),

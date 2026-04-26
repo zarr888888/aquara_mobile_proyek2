@@ -57,6 +57,7 @@ class _AiFishoScreenState extends State<AiFishoScreen> {
         setState(() {
           _resultData = jsonResult['data'];
         });
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Analisa Selesai!"), backgroundColor: Colors.green));
       } else {
         _showError(jsonResult['message'] ?? "Error Kode: ${response.statusCode}");

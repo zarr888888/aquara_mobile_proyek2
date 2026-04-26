@@ -10,7 +10,7 @@ import 'edit_jualan_screen.dart';
 
 class PasarScreen extends StatefulWidget {
   final int? targetItemId;
-  const PasarScreen({Key? key, this.targetItemId}) : super(key: key);
+  const PasarScreen({super.key, this.targetItemId});
 
   @override
   _PasarScreenState createState() => _PasarScreenState();
@@ -47,7 +47,7 @@ class _PasarScreenState extends State<PasarScreen> {
   void _hubungiPenjual(String nomor, String namaIkan, String harga) async {
     String nomorClean = nomor.replaceAll(RegExp(r'[^0-9]'), '');
     if (nomorClean.startsWith('0')) {
-      nomorClean = '62' + nomorClean.substring(1);
+      nomorClean = '62${nomorClean.substring(1)}';
     }
 
     String pesan = "Halo Bapak/Ibu, saya tertarik dengan *$namaIkan* seharga *$harga* yang ada di aplikasi AQUARA. Apakah masih tersedia?";
@@ -56,6 +56,7 @@ class _PasarScreenState extends State<PasarScreen> {
     if (await canLaunchUrl(Uri.parse(url))) {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal membuka WhatsApp")));
     }
   }
@@ -140,8 +141,10 @@ class _PasarScreenState extends State<PasarScreen> {
               bool success = await _apiService.deletePasarItem(id); 
               if (success) {
                 setState(() { _pasarFuture = _apiService.fetchPasar(); });
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Jualan berhasil dihapus.")));
               } else {
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal menghapus jualan.")));
               }
             },

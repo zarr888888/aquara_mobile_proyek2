@@ -4,12 +4,11 @@ import '../services/api_service.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
 import 'syarat_ketentuan_screen.dart';
-import 'ganti_password_screen.dart';
 import 'otp_screen.dart';
 import 'lupa_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   _LoginScreenState createState() => _LoginScreenState();
@@ -37,6 +36,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = false);
 
+    if (!mounted) return;
     if (result['success']) {
       Navigator.pushAndRemoveUntil(
         context,
@@ -101,6 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     setState(() => isSending = false);
 
                     if (response['success']) {
+                      if (!context.mounted) return;
                       Navigator.pop(context); 
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text(response['message'], style: const TextStyle(color: Colors.white)), backgroundColor: Colors.green)
@@ -113,6 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       );
                     } else {
+                      if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text(response['message']), backgroundColor: Colors.red)
                       );
@@ -292,6 +294,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       var result = await ApiService().loginWithGoogle();
                       
                       if (result['success'] == true) {
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(result['message']), 
@@ -304,6 +307,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           MaterialPageRoute(builder: (context) => const HomeScreen()), 
                         ); 
                       } else {
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(result['message']), 

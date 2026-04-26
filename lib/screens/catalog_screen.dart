@@ -256,6 +256,7 @@ class _CatalogScreenState extends State<CatalogScreen> with SingleTickerProvider
                       if (await canLaunchUrl(Uri.parse(url))) {
                         await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
                       } else {
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal membuka WhatsApp")));
                       }
                     },
@@ -339,6 +340,7 @@ class _CatalogScreenState extends State<CatalogScreen> with SingleTickerProvider
                             if (await canLaunchUrl(Uri.parse(url))) {
                               await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
                             } else {
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal membuka WhatsApp")));
                             }
                           },

@@ -8,12 +8,12 @@ class BeritaDetailScreen extends StatelessWidget {
   final String imageUrl;
 
   const BeritaDetailScreen({
-    Key? key,
+    super.key,
     required this.title,
     required this.content,
     required this.date,
     required this.imageUrl,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

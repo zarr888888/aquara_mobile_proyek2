@@ -93,6 +93,7 @@ class _ForumScreenState extends State<ForumScreen> {
                 bool success = await _apiService.deleteForumPost(postId);
                 if (success) {
                   _refreshForum();
+                  if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Postingan dihapus.")));
                 }
               },
@@ -484,7 +485,9 @@ class _ForumScreenState extends State<ForumScreen> {
                                       ],
                                     ),
                       trailing: (isMyPost && !isGuest) ? PopupMenuButton(
-                        onSelected: (value) { if (value == 'edit') _showEditDialog(post); else if (value == 'delete') _confirmDelete(post['id']); },
+                        onSelected: (value) { if (value == 'edit') {
+                          _showEditDialog(post);
+                        } else if (value == 'delete') _confirmDelete(post['id']); },
                         itemBuilder: (context) => [const PopupMenuItem(value: 'edit', child: Text("Edit")), const PopupMenuItem(value: 'delete', child: Text("Hapus", style: TextStyle(color: Colors.red)))],
                       ) : null,
                     ),

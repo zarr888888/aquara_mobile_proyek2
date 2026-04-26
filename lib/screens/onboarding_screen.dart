@@ -19,6 +19,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setBool('showOnboarding', false);
     
+    if (!context.mounted) return;
     if (mounted) {
       Navigator.pushReplacement(
         context,
@@ -133,7 +134,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
+          SizedBox(
             height: 250,
             child: Image.asset(image, fit: BoxFit.contain),
           ),

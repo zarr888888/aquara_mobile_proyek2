@@ -11,7 +11,7 @@ class ProfilScreen extends StatefulWidget {
   final String? publicUserId;
   final String? publicUserName;
 
-  const ProfilScreen({Key? key, this.publicUserId, this.publicUserName}) : super(key: key);
+  const ProfilScreen({super.key, this.publicUserId, this.publicUserName});
 
   @override
   _ProfilScreenState createState() => _ProfilScreenState();
@@ -70,6 +70,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
     await prefs.remove('token');
     await prefs.remove('user_id');
     await prefs.remove('user_name');
+    if (!mounted) return;
     Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const HomeScreen()), (route) => false);
   }
 
@@ -223,7 +224,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Container(
+                  SizedBox(
                   height: 300,
                   child: _stokIkanFuture == null 
                       ? const Center(child: CircularProgressIndicator()) 

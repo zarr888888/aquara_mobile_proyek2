@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 
 class GantiPasswordScreen extends StatefulWidget {
-  const GantiPasswordScreen({Key? key}) : super(key: key);
+  const GantiPasswordScreen({super.key});
 
   @override
   State<GantiPasswordScreen> createState() => _GantiPasswordScreenState();
@@ -35,6 +35,7 @@ class _GantiPasswordScreenState extends State<GantiPasswordScreen> {
 
     setState(() => _isLoading = false);
 
+    if (!mounted) return;
     if (result['success']) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result['message']), backgroundColor: Colors.green),

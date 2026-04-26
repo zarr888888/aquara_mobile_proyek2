@@ -5,7 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 
 class TambahJualanScreen extends StatefulWidget {
-  const TambahJualanScreen({Key? key}) : super(key: key);
+  const TambahJualanScreen({super.key});
 
   @override
   _TambahJualanScreenState createState() => _TambahJualanScreenState();
@@ -54,6 +54,7 @@ class _TambahJualanScreenState extends State<TambahJualanScreen> {
 
     setState(() => _isLoading = false);
 
+    if (!mounted) return;
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Berhasil memposting jualan!", style: TextStyle(color: Colors.white)), backgroundColor: Colors.green));
       Navigator.pop(context, true); 

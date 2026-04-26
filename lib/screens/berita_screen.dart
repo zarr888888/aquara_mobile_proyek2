@@ -6,7 +6,7 @@ import '../services/api_service.dart';
 import 'berita_detail_screen.dart';
 
 class BeritaScreen extends StatefulWidget {
-  const BeritaScreen({Key? key}) : super(key: key);
+  const BeritaScreen({super.key});
 
   @override
   _BeritaScreenState createState() => _BeritaScreenState();
@@ -141,6 +141,7 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
           if (linkAsli.isNotEmpty) {
             final Uri url = Uri.parse(linkAsli);
             if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal membuka browser')));
             }
           }

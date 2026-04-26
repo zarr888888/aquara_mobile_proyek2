@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'ganti_password_screen.dart';
-import '../main.dart';
 import 'ubah_kontak_screen.dart';
 import 'home_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart'; 
@@ -12,7 +11,7 @@ import 'tentang_aquara_screen.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 class PengaturanScreen extends StatefulWidget {
-  const PengaturanScreen({Key? key}) : super(key: key);
+  const PengaturanScreen({super.key});
 
   @override
   State<PengaturanScreen> createState() => _PengaturanScreenState();
@@ -20,7 +19,7 @@ class PengaturanScreen extends StatefulWidget {
 
 class _PengaturanScreenState extends State<PengaturanScreen> {
   // Variabel sementara untuk tombol Switch
-  bool _isDarkMode = false;
+  final bool _isDarkMode = false;
   bool _isNotifOn = true;
 
   @override
@@ -298,7 +297,7 @@ class _PengaturanScreenState extends State<PengaturanScreen> {
                     if (success) {
                       SharedPreferences prefs = await SharedPreferences.getInstance();
                       await prefs.clear();
-                      
+                      if (!context.mounted) return;
                       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const HomeScreen()), (route) => false);
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Akun Anda telah musnah selamanya."), backgroundColor: Colors.black));
                     } else {

@@ -211,7 +211,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
                           ),
-                          value: _selectedFish,
+                          initialValue: _selectedFish,
                           items: snapshot.data!.map((fish) {
                             return DropdownMenuItem<Map<String, dynamic>>(
                               value: fish,

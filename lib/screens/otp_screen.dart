@@ -58,6 +58,7 @@ class _OtpScreenState extends State<OtpScreen> {
 
     if (!context.mounted) return;
 
+    if (!mounted) return;
     if (result['success']) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.green));
       

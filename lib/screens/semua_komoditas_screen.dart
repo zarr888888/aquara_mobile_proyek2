@@ -5,7 +5,7 @@ import '../services/api_service.dart';
 import 'analysis_screen.dart';
 
 class SemuaKomoditasScreen extends StatefulWidget {
-  const SemuaKomoditasScreen({Key? key}) : super(key: key);
+  const SemuaKomoditasScreen({super.key});
 
   @override
   State<SemuaKomoditasScreen> createState() => _SemuaKomoditasScreenState();

@@ -9,7 +9,7 @@ final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print("Radar Background Menangkap Sinyal: ${message.messageId}");
+  debugPrint("Radar Background Menangkap Sinyal: ${message.messageId}");
 }
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -28,13 +28,13 @@ void main() async {
 
     const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
     const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+    await flutterLocalNotificationsPlugin.initialize(settings: initializationSettings);
 
     await FirebaseMessaging.instance.subscribeToTopic("all_users");
-    print("Berhasil berlangganan ke Toa Masjid 'all_users'");
+    debugPrint("Berhasil berlangganan ke Toa Masjid 'all_users'");
 
   } catch (e) {
-    print("Waduh, Firebase gagal menyala Komandan: $e");
+    debugPrint("Waduh, Firebase gagal menyala Komandan: $e");
   }
 
   runApp(const MyApp());
@@ -53,7 +53,7 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print("Ada Sinyal Masuk Saat Aplikasi Dibuka!");
+      debugPrint("Ada Sinyal Masuk Saat Aplikasi Dibuka!");
       
       if (message.notification != null) {
         _showLocalNotification(message.notification!.title ?? 'AQUARA', message.notification!.body ?? '');
@@ -72,7 +72,12 @@ class _MyAppState extends State<MyApp> {
     );
     const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
     
-    await flutterLocalNotificationsPlugin.show(0, title, body, platformChannelSpecifics);
+        await flutterLocalNotificationsPlugin.show(
+      id: 0,
+      title: title,
+      body: body,
+      notificationDetails: platformChannelSpecifics,
+    );
   }
 
   @override

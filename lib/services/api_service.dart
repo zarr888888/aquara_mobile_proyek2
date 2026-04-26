@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'dart:convert';
@@ -18,7 +19,7 @@ class ApiService {
         throw Exception('Gagal mengambil data');
       }
     } catch (e) {
-      print("Error: $e");
+      debugPrint("Error: $e");
       return []; 
     }
   }
@@ -34,7 +35,7 @@ class ApiService {
         throw Exception('Gagal mengambil data berita');
       }
     } catch (e) {
-      print("Error fetchPosts: $e");
+      debugPrint("Error fetchPosts: $e");
       return [];
     }
   }
@@ -54,7 +55,7 @@ class ApiService {
       }
       return [];
     } catch (e) {
-      print("Error fetchBeritaNasional: $e");
+      debugPrint("Error fetchBeritaNasional: $e");
       return [];
     }
   }
@@ -107,7 +108,7 @@ class ApiService {
       
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      print("Error Upload Forum: $e");
+      debugPrint("Error Upload Forum: $e");
       return false;
     }
   }
@@ -203,7 +204,7 @@ class ApiService {
       var response = await request.send();
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      print("Error Upload Pasar: $e");
+      debugPrint("Error Upload Pasar: $e");
       return false;
     }
   }
@@ -350,7 +351,7 @@ class ApiService {
         return {'success': false, 'message': 'Gagal sinkronisasi dengan server'};
       }
     } catch (e) {
-      print("Error Google Sign In: $e");
+      debugPrint("Error Google Sign In: $e");
       return {'success': false, 'message': 'Terjadi kesalahan sistem.'};
     }
   }
@@ -492,7 +493,7 @@ class ApiService {
       }
       return null;
     } catch (e) {
-      print("Error fetch user profile: $e");
+      debugPrint("Error fetch user profile: $e");
       return null;
     }
   }
@@ -515,11 +516,11 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 204) {
         return true;
       } else {
-        print('Gagal menghapus jualan: ${response.body}');
+        debugPrint('Gagal menghapus jualan: ${response.body}');
         return false;
       }
     } catch (e) {
-      print('Error deletePasarItem: $e');
+      debugPrint('Error deletePasarItem: $e');
       return false;
     }
   }
@@ -555,7 +556,7 @@ class ApiService {
       var response = await request.send();
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      print("Error updatePasarItem: $e");
+      debugPrint("Error updatePasarItem: $e");
       return false;
     }
   }
