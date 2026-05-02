@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class ApiService {
-  final String baseUrl = 'http://192.168.43.63:8000/api'; 
+  final String baseUrl = 'https://aquara.app/api'; 
 
   Future<List<dynamic>> fetchFishTypes() async {
     try {

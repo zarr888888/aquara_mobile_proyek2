@@ -144,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Colors.white.withOpacity(0.2), 
                               image: _fotoProfil.isNotEmpty 
                                   ? DecorationImage(
-                                      image: NetworkImage("http://192.168.43.63:8000/storage/$_fotoProfil"), 
+                                      image: NetworkImage("https://aquara.app/storage/$_fotoProfil"), 
                                       fit: BoxFit.cover,
                                     )
                                   : null, 

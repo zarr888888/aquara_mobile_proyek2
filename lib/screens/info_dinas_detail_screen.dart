@@ -19,7 +19,7 @@ class InfoDinasDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     String imageUrl = post['image'] != null 
-        ? "http://192.168.43.63:8000/storage/${post['image']}" 
+        ? "https://aquara.app/storage/${post['image']}" 
         : "https://via.placeholder.com/600x400";
 
     return Scaffold(

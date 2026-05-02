@@ -19,7 +19,7 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
   late Future<List<dynamic>> _postsFuture;
   late Future<List<dynamic>> _beritaNasionalFuture;
 
-  final String storageUrl = 'http://192.168.43.63:8000/storage/';
+  final String storageUrl = 'https://aquara.app/storage/';
 
   @override
   void initState() {

@@ -115,7 +115,7 @@ class _InfoDinasScreenState extends State<InfoDinasScreen> {
                   itemBuilder: (context, index) {
                     final post = snapshot.data![index];
                     String imageUrl = post['image'] != null 
-                        ? "http://192.168.43.63:8000/storage/${post['image']}" 
+                        ? "https://aquara.app/storage/${post['image']}" 
                         : "https://via.placeholder.com/500x300";
 
                       return GestureDetector(

@@ -19,7 +19,7 @@ class _ForumScreenState extends State<ForumScreen> {
   late Future<List<dynamic>> _forumList;
   final ImagePicker _picker = ImagePicker();
   
-  final String storageUrl = 'http://192.168.43.63:8000/storage/';
+  final String storageUrl = 'https://aquara.app/storage/';
   
   bool isGuest = true; 
   String currentUserId = ""; 
@@ -107,7 +107,7 @@ class _ForumScreenState extends State<ForumScreen> {
   void _showEditDialog(Map<String, dynamic> post) {
     TextEditingController contentController = TextEditingController(text: post['content']);
     File? newImageFile;
-    String? oldImageUrl = post['image'] != null ? "http://192.168.43.63:8000/storage/${post['image']}" : null;
+    String? oldImageUrl = post['image'] != null ? "https://aquara.app/storage/${post['image']}" : null;
 
     showModalBottomSheet(
       context: context,
@@ -502,7 +502,7 @@ class _ForumScreenState extends State<ForumScreen> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(10), 
                             child: Image.network(
-                              "http://192.168.43.63:8000/storage/${post['image']}", 
+                              "https://aquara.app/storage/${post['image']}", 
                               width: double.infinity,
                               fit: BoxFit.contain, 
                               errorBuilder: (ctx, err, stack) => Container(

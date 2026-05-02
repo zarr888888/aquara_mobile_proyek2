@@ -20,7 +20,7 @@ class _PasarScreenState extends State<PasarScreen> {
   final ApiService _apiService = ApiService();
   late Future<List<dynamic>> _pasarFuture;
   
-  final String storageUrl = 'http://192.168.43.63:8000/storage/'; 
+  final String storageUrl = 'https://aquara.app/storage/'; 
   
   bool _isLoggedIn = false;
   String? currentUserId;

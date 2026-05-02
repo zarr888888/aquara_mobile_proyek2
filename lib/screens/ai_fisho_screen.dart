@@ -38,7 +38,7 @@ class _AiFishoScreenState extends State<AiFishoScreen> {
     });
 
     try {
-      var uri = Uri.parse('http://192.168.43.63:8000/api/ai-analyze'); 
+      var uri = Uri.parse('https://aquara.app/api/ai-analyze'); 
       
       var request = http.MultipartRequest('POST', uri);
       

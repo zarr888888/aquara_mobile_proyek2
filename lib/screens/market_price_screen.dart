@@ -104,7 +104,7 @@ class _MarketPriceScreenState extends State<MarketPriceScreen> {
 
   Widget _buildPriceCard(Map<String, dynamic> fish) {
     String imageUrl = fish['image'] != null 
-        ? "http://192.168.43.63:8000/storage/${fish['image']}" 
+        ? "https://aquara.app/storage/${fish['image']}" 
         : "https://via.placeholder.com/150";
 
     // Harga

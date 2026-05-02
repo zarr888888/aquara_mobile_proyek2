@@ -26,7 +26,7 @@ class _EditJualanScreenState extends State<EditJualanScreen> {
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
-  final String storageUrl = 'http://192.168.43.63:8000/storage/';
+  final String storageUrl = 'https://aquara.app/storage/';
 
   @override
   void initState() {

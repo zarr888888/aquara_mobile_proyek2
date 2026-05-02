@@ -139,7 +139,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
                                           child: ClipRRect(
                                             borderRadius: BorderRadius.circular(16),
                                             child: Image.network(
-                                              'http://192.168.43.63:8000/storage/$_fotoProfilUrl',
+                                              'https://aquara.app/storage/$_fotoProfilUrl',
                                               fit: BoxFit.contain,
                                             ),
                                           ),
@@ -165,7 +165,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
                                 ? ClipRRect(
                                     borderRadius: BorderRadius.circular(50),
                                     child: Image.network(
-                                      'http://192.168.43.63:8000/storage/$_fotoProfilUrl',
+                                      'https://aquara.app/storage/$_fotoProfilUrl',
                                       width: 100, height: 100, fit: BoxFit.cover,
                                       errorBuilder: (context, error, stackTrace) => Icon(Icons.person, size: 60, color: indramayuBlue),
                                     )
@@ -255,7 +255,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
                                 leading: ClipRRect(
                                   borderRadius: BorderRadius.circular(10),
                                   child: item['foto'] != null && item['foto'].toString().isNotEmpty
-                                      ? Image.network('http://192.168.43.63:8000/storage/' + item['foto'], width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => Container(width: 50, height: 50, color: indramayuBlue.withOpacity(0.1), child: const Icon(Icons.image_not_supported, color: Color(0xFF009FE3))))
+                                      ? Image.network('https://aquara.app/storage/' + item['foto'], width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => Container(width: 50, height: 50, color: indramayuBlue.withOpacity(0.1), child: const Icon(Icons.image_not_supported, color: Color(0xFF009FE3))))
                                       : Container(width: 50, height: 50, color: indramayuBlue.withOpacity(0.1), child: const Icon(Icons.water_drop, color: Color(0xFF009FE3))),
                                 ),
                                 title: Text(item['nama_ikan'] ?? '-', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14)),

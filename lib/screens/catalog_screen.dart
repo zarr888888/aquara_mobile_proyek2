@@ -162,7 +162,7 @@ class _CatalogScreenState extends State<CatalogScreen> with SingleTickerProvider
             var fish = snapshot.data![index];
             // GANTI IP DI SINI (Sesuaikan Laptop Mas)
             String imageUrl = fish['image'] != null 
-                ? "http://192.168.43.63:8000/storage/${fish['image']}" 
+                ? "https://aquara.app/storage/${fish['image']}" 
                 : "https://via.placeholder.com/150";
 
             // TAMBAHAN: GestureDetector biar bisa diklik lagi!
@@ -277,7 +277,7 @@ class _CatalogScreenState extends State<CatalogScreen> with SingleTickerProvider
                   var fish = stock['fish_type'];
                   
                   String imageUrl = fish != null && fish['image'] != null
-                      ? "http://192.168.43.63:8000/storage/${fish['image']}" 
+                      ? "https://aquara.app/storage/${fish['image']}" 
                       : "https://via.placeholder.com/150";
 
                   return Container(
