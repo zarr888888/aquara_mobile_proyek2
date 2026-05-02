@@ -1,0 +1,61 @@
+name: AQUARA CI/CD Auto Build
+
+# Robot akan otomatis merakit APK setiap kali ada kodingan yang di-push ke branch main
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: # Tombol manual jika ingin menjalankan dari GitHub
+
+jobs:
+  build-apk:
+    name: Build & Release AQUARA APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # ⚠️ PERHATIAN: Ganti angka ini sesuai versi Flutter di laptop Komandan!
+          # Ketik 'flutter --version' di terminal untuk mengeceknya.
+          flutter-version: '3.35.2' 
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Install Dependencies
+        run: flutter pub get
+
+      - name: 🏗️ Build APK Release (Split per Arsitektur)
+        run: flutter build apk --release --split-per-abi
+
+      - name: 📤 Kirim APK ke Telegram
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          
+          # Robot akan mencari semua file APK yang berhasil dirakit
+          for apk in build/app/outputs/flutter-apk/app-*-release.apk; do
+            FILENAME=$(basename "$apk")
+            
+            # Mengirimkan setiap file APK ke Telegram Komandan
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" \
+              -F "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+              -F "document=@${apk}" \
+              -F "caption=📦 *AQUARA Mobile Build Sukses!* 🚀
+              
+              📝 *Pesan Commit:* 
+              $COMMIT_MSG
+              
+              📂 *File:* \`$FILENAME\`" \
+              -F "parse_mode=Markdown"
+              
+            echo "Berhasil mengirim: $FILENAME"
+            sleep 2 # Jeda 2 detik agar server Telegram tidak menganggapnya spam
+          done
