@@ -413,10 +413,30 @@ class _ForumScreenState extends State<ForumScreen> {
                   SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF009FE3)),
                       onPressed: () async {
                         if (contentController.text.isNotEmpty) {
-                          Navigator.pop(context);
-                          bool success = await _apiService.postForum(currentUserId, currentUserName, contentController.text, selectedImage);
-                          if (success) _refreshForum();
-                        }} , child: const Text("Posting", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))),
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (ctx) => const Center(child: CircularProgressIndicator()),
+                          );
+                          
+                          bool success = await _apiService.postForum(
+                            currentUserId, currentUserName, contentController.text, selectedImage
+                          );
+                          
+                          if (context.mounted) Navigator.pop(context);
+                          if (context.mounted) Navigator.pop(context);
+                          
+                          if (success) {
+                            _refreshForum();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Postingan berhasil dibuat!"), backgroundColor: Colors.green)
+                              );
+                            }
+                          }
+                        }
+                      }
+                      , child: const Text("Posting", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))),
                   const SizedBox(height: 20),
                 ],
               ),

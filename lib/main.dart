@@ -9,7 +9,23 @@ final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  debugPrint("Radar Background Menangkap Sinyal: ${message.messageId}");
+  debugPrint("Background message: ${message.messageId}");
+  
+  if (message.notification != null) {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'aquara_channel_id', 'Notifikasi AQUARA',
+      importance: Importance.max,
+      priority: Priority.high,
+      color: Color(0xFF009FE3),
+    );
+    const NotificationDetails details = NotificationDetails(android: androidDetails);
+    await flutterLocalNotificationsPlugin.show(
+      id: 0,
+      title: message.notification!.title ?? 'AQUARA',
+      body: message.notification!.body ?? '',
+      notificationDetails: details,
+    );
+  }
 }
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
