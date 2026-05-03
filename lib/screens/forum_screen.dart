@@ -138,7 +138,12 @@ class _ForumScreenState extends State<ForumScreen> {
 
                   TextButton.icon(
                     onPressed: () async {
-                      final XFile? picked = await _picker.pickImage(source: ImageSource.gallery);
+                      final XFile? picked = await _picker.pickImage(
+                        source: ImageSource.gallery,
+                        imageQuality: 70,
+                        maxWidth: 1280,
+                        maxHeight: 1280,
+                      );
                       if (picked != null) setModalState(() => newImageFile = File(picked.path));
                     },
                     icon: const Icon(Icons.image, color: Color(0xFF009FE3)),
@@ -406,7 +411,12 @@ class _ForumScreenState extends State<ForumScreen> {
                   const SizedBox(height: 10),
                   if (selectedImage != null) _buildImagePreview(FileImage(selectedImage!), () => setModalState(() => selectedImage = null)),
                   TextButton.icon(
-                    onPressed: () async { final XFile? picked = await _picker.pickImage(source: ImageSource.gallery); if (picked != null) setModalState(() => selectedImage = File(picked.path)); },
+                    onPressed: () async { final XFile? picked = await _picker.pickImage(
+                      source: ImageSource.gallery,
+                      imageQuality: 70,      
+                      maxWidth: 1280,        
+                      maxHeight: 1280,       
+                    ); if (picked != null) setModalState(() => selectedImage = File(picked.path)); },
                     icon: const Icon(Icons.image, color: Color(0xFF009FE3)), label: const Text("Tambahkan Foto"),
                   ),
                   const SizedBox(height: 10),
