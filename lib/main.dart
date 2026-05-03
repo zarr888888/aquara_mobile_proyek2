@@ -31,6 +31,7 @@ void main() async {
     await flutterLocalNotificationsPlugin.initialize(settings: initializationSettings);
 
     await FirebaseMessaging.instance.subscribeToTopic("all_users");
+    await FirebaseMessaging.instance.subscribeToTopic("info_pasar");
     debugPrint("Berhasil berlangganan ke Toa Masjid 'all_users'");
 
   } catch (e) {
