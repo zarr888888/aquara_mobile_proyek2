@@ -21,7 +21,12 @@ class _AiFishoScreenState extends State<AiFishoScreen> {
   final indramayuBlue = const Color(0xFF009FE3);
 
   Future<void> _pickImage(ImageSource source) async {
-    final pickedFile = await _picker.pickImage(source: source, imageQuality: 80);
+      final pickedFile = await _picker.pickImage(
+    source: source,
+    imageQuality: 70,
+    maxWidth: 1280,
+    maxHeight: 1280,
+  );
     if (pickedFile != null) {
       setState(() {
         _image = File(pickedFile.path);

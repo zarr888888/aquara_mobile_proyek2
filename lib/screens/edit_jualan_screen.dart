@@ -49,7 +49,12 @@ class _EditJualanScreenState extends State<EditJualanScreen> {
   }
 
   Future<void> _pickImage() async {
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    final XFile? pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+      maxWidth: 1280,
+      maxHeight: 1280,
+    );
     if (pickedFile != null) {
       setState(() {
         _imageFile = File(pickedFile.path);
