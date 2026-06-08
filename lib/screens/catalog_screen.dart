@@ -253,9 +253,8 @@ class _CatalogScreenState extends State<CatalogScreen> with SingleTickerProvider
                       String adminPhone = "6285321820026"; 
                       var url = "https://wa.me/$adminPhone?text=Halo Admin AQUARA, saya ingin mendaftarkan stok ikan tambak saya agar tampil di halaman Bursa Stok aplikasi.";
                       
-                      if (await canLaunchUrl(Uri.parse(url))) {
-                        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-                      } else {
+                      // LANGSUNG DOBRAK BUKA URL TANPA canLaunchUrl
+                      if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal membuka WhatsApp")));
                       }
@@ -337,9 +336,9 @@ class _CatalogScreenState extends State<CatalogScreen> with SingleTickerProvider
                           onTap: () async {
                             String phoneNumber = stock['phone_number']; 
                             var url = "https://wa.me/$phoneNumber?text=Halo ${stock['pengepul_name']}, saya tertarik dengan stok ${fish['name']} Anda.";
-                            if (await canLaunchUrl(Uri.parse(url))) {
-                              await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-                            } else {
+                            
+                            // LANGSUNG DOBRAK BUKA URL TANPA canLaunchUrl
+                            if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal membuka WhatsApp")));
                             }
