@@ -53,9 +53,7 @@ class _PasarScreenState extends State<PasarScreen> {
     String pesan = "Halo Bapak/Ibu, saya tertarik dengan *$namaIkan* seharga *$harga* yang ada di aplikasi AQUARA. Apakah masih tersedia?";
     String url = "https://wa.me/$nomorClean?text=${Uri.encodeComponent(pesan)}";
     
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } else {
+    if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal membuka WhatsApp")));
     }
