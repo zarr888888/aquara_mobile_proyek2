@@ -234,46 +234,58 @@ class _PasarScreenState extends State<PasarScreen> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    GestureDetector(
-                      onTap: () {
-                        if (item['user_id'] != null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ProfilScreen(
-                                publicUserId: item['user_id'].toString(),
-                                publicUserName: penjual,
+                    Flexible(
+                      child: GestureDetector(
+                        onTap: () {
+                          if (item['user_id'] != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ProfilScreen(
+                                  publicUserId: item['user_id'].toString(),
+                                  publicUserName: penjual,
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            fotoProfilUserUrl.isNotEmpty
+                              ? ClipOval(
+                                  child: Image.network(
+                                    fotoProfilUserUrl, width: 20, height: 20, fit: BoxFit.cover,
+                                    errorBuilder: (c, e, s) => const Icon(Icons.person, size: 16, color: Colors.grey),
+                                  )
+                                )
+                              : const Icon(Icons.person, size: 16, color: Colors.grey),
+                            
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                penjual, 
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.poppins(
+                                  color: const Color(0xFF009FE3),
+                                  fontSize: 13, fontWeight: FontWeight.w600, decoration: TextDecoration.underline,
+                                )
                               ),
                             ),
-                          );
-                        }
-                      },
-                      child: Row(
-                        children: [
-                          fotoProfilUserUrl.isNotEmpty
-                            ? ClipOval(
-                                child: Image.network(
-                                  fotoProfilUserUrl, width: 20, height: 20, fit: BoxFit.cover,
-                                  errorBuilder: (c, e, s) => const Icon(Icons.person, size: 16, color: Colors.grey),
-                                )
-                              )
-                            : const Icon(Icons.person, size: 16, color: Colors.grey),
-                          
-                          const SizedBox(width: 4),
-                          Text(
-                            penjual, 
-                            style: GoogleFonts.poppins(
-                              color: const Color(0xFF009FE3),
-                              fontSize: 13, fontWeight: FontWeight.w600, decoration: TextDecoration.underline,
-                            )
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(width: 16),
                     const Icon(Icons.location_on, size: 16, color: Colors.redAccent),
                     const SizedBox(width: 4),
-                    Text(lokasi, style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 13)),
+                    Flexible(
+                      child: Text(
+                        lokasi, 
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 13),
+                      ),
+                    ),
                   ],
                 ),
                 
