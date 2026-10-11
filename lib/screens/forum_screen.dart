@@ -1,606 +1,606 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_result.dart';
 import '../services/api_service.dart';
-import 'profil_screen.dart';
+import '../services/session_service.dart';
+import '../widgets/session_boundary.dart';
 
-class ForumScreen extends StatefulWidget {
-  const ForumScreen({super.key});
-
+class ForumScreen extends StatelessWidget {
+  const ForumScreen({super.key, this.api, this.mine = false, this.clock});
+  final ApiService? api;
+  final bool mine;
+  final DateTime Function()? clock;
   @override
-  State<ForumScreen> createState() => _ForumScreenState();
+  Widget build(BuildContext context) => SessionBoundary(
+    api: api,
+    private: true,
+    builder: (_) => _ForumScreenContent(api: api, mine: mine, clock: clock),
+  );
 }
 
-class _ForumScreenState extends State<ForumScreen> {
-  final ApiService _apiService = ApiService();
-  late Future<List<dynamic>> _forumList;
-  final ImagePicker _picker = ImagePicker();
-  
-  final String storageUrl = 'https://aquara.app/storage/';
-  
-  bool isGuest = true; 
-  String currentUserId = ""; 
-  String currentUserName = ""; 
-  String currentUserFoto = "";
+class _ForumScreenContent extends StatefulWidget {
+  const _ForumScreenContent({this.api, required this.mine, this.clock});
+  final ApiService? api;
+  final bool mine;
+  final DateTime Function()? clock;
+  @override
+  State<_ForumScreenContent> createState() => _ForumScreenState();
+}
+
+class _ForumScreenState extends State<_ForumScreenContent>
+    with SessionOwnedState<_ForumScreenContent>, WidgetsBindingObserver {
+  late final ApiService _api = widget.api ?? ApiService();
+  @override
+  SessionService get stateSession => _api.session;
+  SessionSnapshot? _owner;
+  List<dynamic> _posts = [];
+  bool _loading = true, _busy = false, _uncertain = false;
+  String? _message;
+  DateTime? _retryAt;
+  bool _localWait = false;
+  Timer? _timer;
+  bool _foreground = true;
+  StreamSubscription<int>? _subscription;
+  final _updates = ValueNotifier<int>(0);
+  final _draft = TextEditingController();
+  File? _image;
+  Future<bool>? _readFlight;
+  DateTime _now() => (widget.clock ?? DateTime.now)();
+  bool get _active =>
+      sessionActive && _owner != null && stateSession.owns(_owner!);
+  int get _remaining {
+    final ms = _retryAt?.difference(_now()).inMilliseconds ?? 0;
+    return ms > 0 ? (ms / 1000).ceil() : 0;
+  }
+
+  bool get _blocked => !_active || _busy || _remaining > 0 || _uncertain;
+  bool _owns(Map item) {
+    final id = int.tryParse(stateSession.metadata['user_id'] ?? '');
+    return id != null && id > 0 && item['user_id'] == id;
+  }
 
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus(); 
-  }
-
-  Future<void> _checkLoginStatus() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      String? token = prefs.getString('token');
-      isGuest = token == null; 
-      if (!isGuest) {
-        currentUserId = prefs.getString('user_id') ?? "";
-        currentUserName = prefs.getString('user_name') ?? "Petani";
+    WidgetsBinding.instance.addObserver(this);
+    _subscription = stateSession.changes.listen((_) {
+      if (!sessionActive) {
+        _timer?.cancel();
+        _posts.clear();
+        _draft.clear();
+        _image = null;
+        _message = null;
+        _updates.value++;
       }
     });
-    _refreshForum(); 
-    
-    if (!isGuest && currentUserId.isNotEmpty) {
-      final userData = await _apiService.getUserProfile(currentUserId);
-      if (userData != null && mounted) {
-        setState(() { currentUserFoto = userData['foto_profil'] ?? ""; });
-      }
+    _open();
+  }
+
+  Future<void> _open() async {
+    final owner = await stateSession.snapshot();
+    if (!sessionActive || !stateSession.owns(owner)) return;
+    _owner = owner;
+    await _refresh();
+  }
+
+  void _paint() {
+    if (!_active) return;
+    setState(() {});
+    _updates.value++;
+  }
+
+  void _failure(ApiFailure failure, {bool mutation = false}) {
+    _message = switch (failure.kind) {
+      ApiErrorKind.forbidden ||
+      ApiErrorKind.notFound => 'Akses atau data Forum tidak tersedia.',
+      ApiErrorKind.validation =>
+        '${failure.message} Periksa isi teks atau gambar. Draft tetap tersedia.',
+      _ => failure.message,
+    };
+    if (mutation &&
+        {
+          ApiErrorKind.timeout,
+          ApiErrorKind.network,
+          ApiErrorKind.invalidResponse,
+        }.contains(failure.kind)) {
+      _uncertain = true;
+      _message =
+          'Hasil aksi belum dapat dipastikan. Periksa ulang daftar sebelum mengulang.';
+    }
+    if (failure.kind == ApiErrorKind.rateLimited) {
+      _localWait = failure.retryAt == null && failure.retryAfter == null;
+      _retryAt =
+          failure.retryAt ??
+          _now().add(failure.retryAfter ?? const Duration(seconds: 60));
+      _startTimer();
     }
   }
 
-  void _refreshForum() {
-    setState(() {
-      _forumList = _apiService.fetchForumPosts(currentUserId);
+  void _startTimer() {
+    _timer?.cancel();
+    if (_remaining == 0 || !_active || !_foreground) return;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_remaining == 0 || !_active) _timer?.cancel();
+      _paint();
     });
-  }
-
-  String timeAgo(String? dateString) {
-    if (dateString == null) return "-";
-    DateTime date = DateTime.parse(dateString);
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inSeconds < 60) {
-      return "Baru saja";
-    } else if (difference.inMinutes < 60) {
-      return "${difference.inMinutes}mnt";
-    } else if (difference.inHours < 24) {
-      return "${difference.inHours}jam";
-    } else if (difference.inDays < 7) {
-      return "${difference.inDays}hr";
-    } else {
-      return "${date.day}/${date.month}/${date.year}";
-    }
-  }
-
-  Future<void> _confirmDelete(int postId) async {
-    return showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Hapus Postingan?"),
-          content: const Text("Anda yakin ingin menghapus postingan ini? Tindakan ini tidak dapat dibatalkan."),
-          actions: [
-            TextButton(child: const Text("Batal", style: TextStyle(color: Colors.grey)), onPressed: () => Navigator.of(context).pop()),
-            TextButton(
-              child: const Text("Hapus", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              onPressed: () async {
-                Navigator.of(context).pop(); 
-                bool success = await _apiService.deleteForumPost(postId);
-                if (success) {
-                  _refreshForum();
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Postingan dihapus.")));
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showEditDialog(Map<String, dynamic> post) {
-    TextEditingController contentController = TextEditingController(text: post['content']);
-    File? newImageFile;
-    String? oldImageUrl = post['image'] != null ? "https://aquara.app/storage/${post['image']}" : null;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 20, left: 20, right: 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Edit Postingan", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18)),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: contentController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(labelText: "Edit deskripsi...", border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  
-                  if (newImageFile != null)
-                    _buildImagePreview(FileImage(newImageFile!), () => setModalState(() => newImageFile = null))
-                  else if (oldImageUrl != null)
-                    _buildImagePreview(NetworkImage(oldImageUrl), null), 
-
-                  TextButton.icon(
-                    onPressed: () async {
-                      final XFile? picked = await _picker.pickImage(
-                        source: ImageSource.gallery,
-                        imageQuality: 70,
-                        maxWidth: 1280,
-                        maxHeight: 1280,
-                      );
-                      if (picked != null) setModalState(() => newImageFile = File(picked.path));
-                    },
-                    icon: const Icon(Icons.image, color: Color(0xFF009FE3)),
-                    label: Text(oldImageUrl == null && newImageFile == null ? "Tambahkan Foto" : "Ganti Foto"),
-                  ),
-                  const SizedBox(height: 10),
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF009FE3)),
-                      onPressed: () {
-                        Navigator.pop(context); 
-                        showDialog(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text("Simpan Perubahan?"),
-                            content: const Text("Anda yakin ingin menyimpan perubahan pada postingan ini?"),
-                            actions: [
-                              TextButton(child: const Text("Batal"), onPressed: () => Navigator.pop(ctx)),
-                              TextButton(
-                                child: const Text("Ya, Simpan", style: TextStyle(fontWeight: FontWeight.bold)),
-                                onPressed: () async {
-                                  Navigator.pop(ctx);
-                                  bool success = await _apiService.updateForumPost(post['id'], contentController.text, newImageFile);
-                                  if (success) _refreshForum();
-                                },
-                              ),
-                            ],
-                          )
-                        );
-                      },
-                      child: const Text("Simpan Perubahan", style: TextStyle(color: Colors.white)),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            );
-          }
-        );
-      },
-    );
-  }
-  
-  Widget _buildImagePreview(ImageProvider imageProvider, VoidCallback? onRemove) {
-    return Stack(
-      children: [
-        ClipRRect(borderRadius: BorderRadius.circular(10), child: Image(image: imageProvider, height: 100, width: double.infinity, fit: BoxFit.cover)),
-        if (onRemove != null) Positioned(right: 5, top: 5, child: GestureDetector(onTap: onRemove, child: const CircleAvatar(radius: 12, backgroundColor: Colors.red, child: Icon(Icons.close, size: 15, color: Colors.white)))),
-      ],
-    );
-  }
-
-  void _showCommentSheet(Map<String, dynamic> post) {
-    TextEditingController commentController = TextEditingController();
-    FocusNode commentFocusNode = FocusNode(); 
-    String? replyToUser; 
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.75, 
-              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(15),
-                    child: Text("Komentar", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                  const Divider(height: 1),
-
-                  Expanded(
-                    child: post['comments'].isEmpty
-                        ? Center(child: Text("Belum ada komentar.", style: GoogleFonts.poppins(color: Colors.grey)))
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(15),
-                            itemCount: post['comments'].length,
-                              itemBuilder: (context, index) {
-                              final comment = post['comments'][index];
-                              bool isMyComment = comment['author_name'] == currentUserName; 
-                              
-                              String fotoProfilKomen = '';
-                              if (comment['user'] != null && comment['user']['foto_profil'] != null) {
-                                fotoProfilKomen = storageUrl + comment['user']['foto_profil'].toString();
-                              }
-
-                              return InkWell(
-                                onLongPress: (isMyComment && !isGuest) ? () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title: const Text("Hapus Komentar?"),
-                                      actions: [
-                                        TextButton(child: const Text("Batal"), onPressed: () => Navigator.pop(ctx)),
-                                        TextButton(
-                                          child: const Text("Hapus", style: TextStyle(color: Colors.red)),
-                                          onPressed: () async {
-                                            Navigator.pop(ctx);
-
-                                            await _apiService.deleteComment(comment['id']);
-
-                                            setSheetState(() {
-                                              post['comments'].removeWhere((item) => item['id'] == comment['id']);
-                                              
-                                              if (post['comments_count'] != null && post['comments_count'] > 0) {
-                                                post['comments_count'] = post['comments_count'] - 1;
-                                              }
-                                            });
-
-                                            _refreshForum(); 
-
-                                          },
-                                        )
-                                      ],
-                                    ),
-                                  );
-                                } : null,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(bottom: 15),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 18, backgroundColor: Colors.grey[200], 
-                                        child: fotoProfilKomen.isNotEmpty
-                                          ? ClipOval(child: Image.network(fotoProfilKomen, width: 36, height: 36, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.person, size: 20, color: Colors.grey)))
-                                          : const Icon(Icons.person, size: 20, color: Colors.grey)
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                GestureDetector(
-                                                  onTap: () {
-                                                    if (comment['user_id'] != null) {
-                                                      Navigator.push(context, MaterialPageRoute(builder: (context) => ProfilScreen(publicUserId: comment['user_id'].toString(), publicUserName: comment['author_name'])));
-                                                    }
-                                                  },
-                                                  child: Text(comment['author_name'], style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, decoration: TextDecoration.underline, color: const Color(0xFF009FE3))),
-                                                ),
-                                                const SizedBox(width: 5),
-                                                Text("· ${timeAgo(comment['created_at'])}", style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey)),
-                                              ],
-                                            ),
-                                            Text(comment['content'], style: GoogleFonts.poppins(fontSize: 13)),
-                                            if (!isGuest)
-                                            Padding(
-                                              padding: const EdgeInsets.only(top: 5),
-                                              child: GestureDetector(
-                                                onTap: () {
-                                                  setSheetState(() {
-                                                    replyToUser = comment['author_name'];
-                                                    commentController.text = "@$replyToUser ";
-                                                  });
-                                                  FocusScope.of(context).requestFocus(commentFocusNode);
-                                                },
-                                                child: Text("Balas", style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[600])),
-                                              ),
-                                            )
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-
-                  if (!isGuest)
-                  Container(
-                    padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 10, left: 15, right: 15, top: 10),
-                    decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey[200]!))),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 18, backgroundColor: Colors.grey[200], 
-                          child: currentUserFoto.isNotEmpty
-                              ? ClipOval(child: Image.network(storageUrl + currentUserFoto, width: 36, height: 36, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.person, size: 20, color: Colors.grey)))
-                              : const Icon(Icons.person, size: 20, color: Colors.grey)
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: commentController,
-                            focusNode: commentFocusNode,
-                            decoration: InputDecoration(
-                              hintText: replyToUser != null ? "Balas @$replyToUser..." : "Tambahkan komentar...",
-                              hintStyle: GoogleFonts.poppins(fontSize: 13, color: Colors.grey),
-                              border: InputBorder.none,
-                              isDense: true,
-                            ),
-                            maxLines: null,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            if (commentController.text.isNotEmpty) {
-                              String content = commentController.text;
-                              commentController.clear();
-                              FocusScope.of(context).unfocus(); 
-
-                              await _apiService.storeComment(post['id'], currentUserName, content);
-
-                              setSheetState(() {
-                                replyToUser = null; 
-                                
-                                post['comments'].insert(0, { 
-                                  'author_name': currentUserName,
-                                  'content': content,
-                                  'created_at': DateTime.now().toIso8601String(),
-                                  'user': {
-                                    'foto_profil': currentUserFoto,
-                                  }
-                                });
-                                
-                                post['comments_count'] = (post['comments_count'] ?? 0) + 1;
-                              });
-
-                              _refreshForum(); 
-                              
-                            }
-                          },
-                          child: Text("Kirim", style: GoogleFonts.poppins(color: const Color(0xFF009FE3), fontWeight: FontWeight.bold)),
-                        )
-                      ],
-                    ),
-                  )
-                ],
-              ),
-            );
-          }
-        );
-      },
-    );
-  }
-
-  void _showCreatePostDialog() {
-    if (isGuest) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Silakan Login dulu!"))); return; }
-    TextEditingController contentController = TextEditingController();
-    File? selectedImage;
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 20, left: 20, right: 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Buat Topik Baru", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18)),
-                  const SizedBox(height: 15),
-                  TextField(controller: contentController, maxLines: 3, decoration: const InputDecoration(hintText: "Apa yang ingin didiskusikan?", border: OutlineInputBorder())),
-                  const SizedBox(height: 10),
-                  if (selectedImage != null) _buildImagePreview(FileImage(selectedImage!), () => setModalState(() => selectedImage = null)),
-                  TextButton.icon(
-                    onPressed: () async { final XFile? picked = await _picker.pickImage(
-                      source: ImageSource.gallery,
-                      imageQuality: 70,      
-                      maxWidth: 1280,        
-                      maxHeight: 1280,       
-                    ); if (picked != null) setModalState(() => selectedImage = File(picked.path)); },
-                    icon: const Icon(Icons.image, color: Color(0xFF009FE3)), label: const Text("Tambahkan Foto"),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF009FE3)),
-                      onPressed: () async {
-                        if (contentController.text.isNotEmpty) {
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (ctx) => const Center(child: CircularProgressIndicator()),
-                          );
-                          
-                          bool success = await _apiService.postForum(
-                            currentUserId, currentUserName, contentController.text, selectedImage
-                          );
-                          
-                          if (context.mounted) Navigator.pop(context);
-                          if (context.mounted) Navigator.pop(context);
-                          
-                          if (success) {
-                            _refreshForum();
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Postingan berhasil dibuat!"), backgroundColor: Colors.green)
-                              );
-                            }
-                          }
-                        }
-                      }
-                      , child: const Text("Posting", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            );
-          }
-        );
-      },
-    );
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: AppBar(
-        title: Text("Forum Komunitas", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
-        backgroundColor: const Color(0xFF009FE3), elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _timer?.cancel();
+    if (state == AppLifecycleState.resumed) {
+      _paint();
+      _startTimer();
+    }
+  }
+
+  Future<bool> _refresh({bool afterMutation = false}) {
+    if (_readFlight != null) return _readFlight!;
+    if (!_active || _remaining > 0) return Future.value(false);
+    final flight = _read(afterMutation);
+    _readFlight = flight;
+    return flight.whenComplete(() => _readFlight = null);
+  }
+
+  Future<bool> _read(bool afterMutation) async {
+    _loading = true;
+    _paint();
+    final result = await _api.fetchForumPosts(
+      expectedSession: _owner!,
+      mine: widget.mine,
+    );
+    if (!_active) return false;
+    _loading = false;
+    if (result.isSuccess) {
+      _posts = List.of(result.data!);
+      _uncertain = false;
+      _message = afterMutation ? 'Aksi berhasil. Daftar diperbarui.' : null;
+    } else {
+      _failure(result.failure!);
+      if (afterMutation) {
+        _message =
+            'Aksi sudah berhasil, tetapi daftar belum diperbarui. Muat ulang daftar; jangan ulangi aksi. $_message';
+        _uncertain = true;
+      }
+    }
+    _paint();
+    return result.isSuccess;
+  }
+
+  Future<bool> _mutate(
+    Future<ApiResult<Object?>> Function(SessionSnapshot) action, {
+    Map<String, dynamic>? likePost,
+  }) async {
+    if (_blocked || _loading) return false;
+    final owner = _owner!;
+    _busy = true;
+    _message = null;
+    _paint();
+    final result = await action(owner);
+    if (!_active) return false;
+    if (result.isSuccess) {
+      if (likePost != null) likePost['is_liked_by_me'] = result.data == 'liked';
+      await _refresh(afterMutation: true);
+    } else {
+      _failure(result.failure!, mutation: true);
+    }
+    if (!_active) return false;
+    _busy = false;
+    _paint();
+    return result.isSuccess;
+  }
+
+  Future<void> _delete(
+    Map<String, dynamic> item, {
+    bool comment = false,
+  }) async {
+    if (!_owns(item) || _blocked) return;
+    final owner = _owner!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(comment ? 'Hapus Komentar?' : 'Hapus Postingan?'),
+        content: const Text('Tindakan ini tidak dapat dibatalkan.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus'),
+          ),
+        ],
       ),
-      floatingActionButton: isGuest 
-          ? null 
-          : FloatingActionButton(onPressed: _showCreatePostDialog, backgroundColor: const Color(0xFF009FE3), child: const Icon(Icons.add, color: Colors.white)),
-      body: FutureBuilder<List<dynamic>>(
-        future: _forumList,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || snapshot.data!.isEmpty) return Center(child: Text("Belum ada diskusi.", style: GoogleFonts.poppins()));
-          
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            itemCount: snapshot.data!.length,
-            itemBuilder: (context, index) {
-              final post = snapshot.data![index];
-              bool isMyPost = post['user_id'].toString() == currentUserId;
-              bool isLikedByMe = post['is_liked_by_me'] ?? false; 
-              
-              String fotoProfilUserUrl = '';
-              if (post['user'] != null && post['user']['foto_profil'] != null) {
-                fotoProfilUserUrl = storageUrl + post['user']['foto_profil'].toString();
-              }
+    );
+    if (!_active || !stateSession.owns(owner) || confirmed != true) return;
+    await _mutate(
+      (s) => comment
+          ? _api.deleteComment(item['id'], expectedSession: s)
+          : _api.deleteForumPost(item['id'], expectedSession: s),
+    );
+  }
 
-              return Container(
-                color: Colors.white, margin: const EdgeInsets.only(bottom: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+  Future<void> _editor({
+    Map<String, dynamic>? post,
+    bool comments = false,
+  }) async {
+    if (!_active || _busy || (!comments && post != null && !_owns(post))) {
+      return;
+    }
+    _draft.text = comments ? '' : post?['content'] ?? '';
+    _image = null;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => ValueListenableBuilder<int>(
+        valueListenable: _updates,
+        builder: (context, value, child) {
+          if (!_active) return const SizedBox.shrink();
+          Map<String, dynamic>? current = post;
+          if (comments) {
+            for (final p in _posts) {
+              if (p['id'] == post!['id']) current = p;
+            }
+          }
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                MediaQuery.viewInsetsOf(context).bottom + 12,
+              ),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(context).height * .65,
+                child: ListView(
                   children: [
-                    ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.grey[200], 
-                        child: fotoProfilUserUrl.isNotEmpty
-                          ? ClipOval(child: Image.network(fotoProfilUserUrl, width: 40, height: 40, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.person, color: Colors.grey)))
-                          : const Icon(Icons.person, color: Colors.grey)
+                    Text(
+                      comments
+                          ? 'Komentar'
+                          : post == null
+                          ? 'Buat Topik Baru'
+                          : 'Edit Postingan',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      title: GestureDetector(
-                        onTap: () {
-                          if (post['user_id'] != null) {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => ProfilScreen(publicUserId: post['user_id'].toString(), publicUserName: post['author_name'])));
-                          }
-                        },
-                        child: Text(post['author_name'], style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, decoration: TextDecoration.underline, color: const Color(0xFF009FE3))),
-                      ),
-                      subtitle: Row(
-                                      children: [
-                                        Text("Petani Budidaya", style: GoogleFonts.poppins(fontSize: 12)),
-                                        Text(" · ${timeAgo(post['created_at'])}", style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey)),
-                                      ],
-                                    ),
-                      trailing: (isMyPost && !isGuest) ? PopupMenuButton(
-                        onSelected: (value) { if (value == 'edit') {
-                          _showEditDialog(post);
-                        } else if (value == 'delete') _confirmDelete(post['id']); },
-                        itemBuilder: (context) => [const PopupMenuItem(value: 'edit', child: Text("Edit")), const PopupMenuItem(value: 'delete', child: Text("Hapus", style: TextStyle(color: Colors.red)))],
-                      ) : null,
                     ),
-                    
-                    if (post['image'] != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10, bottom: 10),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxHeight: 500,
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(10), 
-                            child: Image.network(
-                              "https://aquara.app/storage/${post['image']}", 
-                              width: double.infinity,
-                              fit: BoxFit.contain, 
-                              errorBuilder: (ctx, err, stack) => Container(
-                                height: 200, 
-                                color: Colors.grey[200], 
-                                child: const Center(child: Icon(Icons.broken_image, color: Colors.grey))
-                              ),
-                            ),
-                          ),
+                    if (comments) ...[
+                      if ((current!['comments'] as List).isEmpty)
+                        const Text('Belum ada komentar.'),
+                      for (final c in current['comments'])
+                        ListTile(
+                          leading: _avatar(c['avatar']),
+                          title: Text(c['author_name']),
+                          subtitle: Text(c['content']),
+                          trailing: _owns(c)
+                              ? IconButton(
+                                  tooltip: 'Hapus komentar',
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: _blocked
+                                      ? null
+                                      : () => _delete(c, comment: true),
+                                )
+                              : null,
+                          onTap: _blocked
+                              ? null
+                              : () => _draft.text = '@${c['author_name']} ',
                         ),
+                    ],
+                    if (_message != null || _remaining > 0) _status(),
+                    TextField(
+                      controller: _draft,
+                      minLines: 3,
+                      maxLines: 6,
+                      enabled: !_busy,
+                      maxLength: !comments && post != null ? null : 5000,
+                      decoration: InputDecoration(
+                        labelText: comments
+                            ? 'Tulis komentar'
+                            : 'Apa yang ingin didiskusikan?',
+                        border: const OutlineInputBorder(),
                       ),
-                    
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(post['content'], style: GoogleFonts.poppins(fontSize: 14)),
                     ),
-
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                      child: Row(
-                        children: [
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: Icon(
-                                  isLikedByMe ? Icons.favorite : Icons.favorite_border,
-                                  color: isLikedByMe ? Colors.red : Colors.black87,
-                                  size: 26
-                                ),
-                                onPressed: isGuest ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Silakan Login untuk menyukai!"))) : () async {
-                                  setState(() {
-                                    if (isLikedByMe) {
-                                      post['likes_count']--; 
-                                      post['is_liked_by_me'] = false; 
-                                    } else {
-                                      post['likes_count']++; 
-                                      post['is_liked_by_me'] = true; 
-                                    }
-                                  });
-                                  await _apiService.toggleLikePost(post['id'], currentUserId);
+                    if (!comments) ...[
+                      if (_image != null)
+                        Image.file(
+                          _image!,
+                          height: 100,
+                          errorBuilder: (c, e, s) =>
+                              const Icon(Icons.broken_image),
+                        )
+                      else if (post?['image'] != null)
+                        _photo(post!['image'], height: 100),
+                      TextButton.icon(
+                        onPressed: _blocked
+                            ? null
+                            : () async {
+                                final owner = _owner!;
+                                final picked = await ImagePicker().pickImage(
+                                  source: ImageSource.gallery,
+                                  imageQuality: 70,
+                                  maxWidth: 1280,
+                                  maxHeight: 1280,
+                                );
+                                if (!_active ||
+                                    !stateSession.owns(owner) ||
+                                    !sheetContext.mounted ||
+                                    picked == null) {
+                                  return;
+                                }
+                                _image = File(picked.path);
+                                _paint();
+                              },
+                        icon: const Icon(Icons.image),
+                        label: const Text('Tambahkan / Ganti Foto'),
+                      ),
+                      if (_image != null)
+                        TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () {
+                                  _image = null;
+                                  _paint();
                                 },
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chat_bubble_outline, color: Colors.black87, size: 24),
-                            onPressed: () => _showCommentSheet(post),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.share_outlined, color: Colors.black87, size: 24),
-                            onPressed: () => Share.share('Cek diskusi ini dari ${post['author_name']}:\n\n"${post['content']}"'),
-                          ),
-                          const Spacer(),
-                        ],
+                          child: const Text('Batalkan gambar baru'),
+                        ),
+                    ],
+                    ElevatedButton(
+                      onPressed: _blocked || _loading
+                          ? null
+                          : () async {
+                              final ok = await _mutate(
+                                (s) => comments
+                                    ? _api.storeComment(
+                                        post!['id'],
+                                        _draft.text,
+                                        expectedSession: s,
+                                      )
+                                    : post == null
+                                    ? _api.postForum(
+                                        _draft.text,
+                                        _image,
+                                        expectedSession: s,
+                                      )
+                                    : _api.updateForumPost(
+                                        post['id'],
+                                        _draft.text,
+                                        _image,
+                                        expectedSession: s,
+                                      ),
+                              );
+                              if (!_active || !sheetContext.mounted) return;
+                              if (ok) {
+                                _draft.clear();
+                                _image = null;
+                                if (!comments) Navigator.pop(sheetContext);
+                              }
+                            },
+                      child: Text(
+                        _busy
+                            ? 'Memproses...'
+                            : comments
+                            ? 'Kirim'
+                            : post == null
+                            ? 'Posting'
+                            : 'Simpan Perubahan',
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                      child: Text("${post['likes_count']} suka · ${post['comments_count']} komentar", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
-                    ),
-                    const SizedBox(height: 10),
                   ],
                 ),
-              );
-            },
+              ),
+            ),
           );
         },
       ),
     );
+    if (!_active) return;
+    _draft.clear();
+    _image = null;
+  }
+
+  Widget _status() => Padding(
+    padding: const EdgeInsets.all(12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_message != null) Text(_message!),
+        if (_remaining > 0)
+          Text(
+            _localWait
+                ? 'Jeda lokal $_remaining detik; waktu reset server tidak diketahui.'
+                : 'Coba kembali dalam $_remaining detik.',
+          ),
+        TextButton(
+          onPressed: _remaining > 0 || _busy || _loading
+              ? null
+              : () => _refresh(),
+          child: const Text('Periksa ulang daftar'),
+        ),
+      ],
+    ),
+  );
+  Widget _avatar(String? url) => CircleAvatar(
+    child: url == null
+        ? const Icon(Icons.person)
+        : ClipOval(child: _photo(url, height: 40)),
+  );
+  Widget _photo(String url, {double? height}) => Image.network(
+    url,
+    height: height,
+    fit: BoxFit.contain,
+    errorBuilder: (c, e, s) => const Icon(Icons.broken_image),
+  );
+  String _date(Object? raw) {
+    final date = raw is String ? DateTime.tryParse(raw) : null;
+    if (date == null) return '-';
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: Text(
+        widget.mine ? 'Forum Saya' : 'Forum Komunitas',
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+      backgroundColor: const Color(0xFF009FE3),
+      foregroundColor: Colors.white,
+      actions: [
+        IconButton(
+          tooltip: 'Muat ulang',
+          onPressed: _loading || _busy || _remaining > 0
+              ? null
+              : () => _refresh(),
+          icon: const Icon(Icons.refresh),
+        ),
+      ],
+    ),
+    floatingActionButton: FloatingActionButton(
+      onPressed: _blocked || _loading ? null : () => _editor(),
+      backgroundColor: const Color(0xFF009FE3),
+      child: const Icon(Icons.add, color: Colors.white),
+    ),
+    body: Column(
+      children: [
+        if (_message != null || _remaining > 0) _status(),
+        if (_loading) const LinearProgressIndicator(),
+        Expanded(
+          child: _loading && _posts.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : _posts.isEmpty
+              ? Center(
+                  child: Text(
+                    _message == null
+                        ? 'Belum ada diskusi.'
+                        : 'Daftar belum tersedia.',
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.only(top: 10, bottom: 88),
+                  itemCount: _posts.length,
+                  itemBuilder: (context, index) {
+                    final post = _posts[index] as Map<String, dynamic>;
+                    return Card(
+                      key: ValueKey('forum-${post['id']}'),
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ListTile(
+                            leading: _avatar(post['avatar']),
+                            title: Text(
+                              post['author_name'],
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(_date(post['created_at'])),
+                            trailing: _owns(post)
+                                ? PopupMenuButton<String>(
+                                    enabled: !_blocked && !_loading,
+                                    onSelected: (value) {
+                                      if (value == 'edit') {
+                                        _editor(post: post);
+                                      } else {
+                                        _delete(post);
+                                      }
+                                    },
+                                    itemBuilder: (_) => const [
+                                      PopupMenuItem(
+                                        value: 'edit',
+                                        child: Text('Edit'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('Hapus'),
+                                      ),
+                                    ],
+                                  )
+                                : null,
+                          ),
+                          if (post['image'] != null)
+                            Center(child: _photo(post['image'], height: 240)),
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              post['content'],
+                              style: GoogleFonts.poppins(fontSize: 14),
+                            ),
+                          ),
+                          Wrap(
+                            children: [
+                              IconButton(
+                                tooltip: 'Suka',
+                                onPressed: _blocked || _loading
+                                    ? null
+                                    : () => _mutate(
+                                        (s) => _api.toggleLikePost(
+                                          post['id'],
+                                          expectedSession: s,
+                                        ),
+                                        likePost: post,
+                                      ),
+                                icon: Icon(
+                                  post['is_liked_by_me']
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
+                                  color: post['is_liked_by_me']
+                                      ? Colors.red
+                                      : null,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Komentar',
+                                onPressed: () =>
+                                    _editor(post: post, comments: true),
+                                icon: const Icon(Icons.chat_bubble_outline),
+                              ),
+                              IconButton(
+                                tooltip: 'Bagikan',
+                                onPressed: () => Share.share(
+                                  'Cek diskusi ini dari ${post['author_name']}:\n\n${post['content']}',
+                                ),
+                                icon: const Icon(Icons.share_outlined),
+                              ),
+                            ],
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              '${post['likes_count']} suka · ${post['comments_count']} komentar',
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    ),
+  );
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _subscription?.cancel();
+    _timer?.cancel();
+    _posts.clear();
+    _draft.dispose();
+    _image = null;
+    _updates.dispose();
+    super.dispose();
   }
 }

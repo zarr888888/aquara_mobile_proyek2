@@ -1,35 +1,101 @@
+import '../widgets/reference_list_builder.dart';
+import '../services/api_result.dart';
+import '../services/session_service.dart';
+import '../widgets/session_boundary.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 
-class AnalysisScreen extends StatefulWidget {
+class AnalysisScreen extends StatelessWidget {
+  final ApiService? api;
   final String? autoFishName;
   final String? autoPrice;
   final String? autoFcr;
   final String? autoPeriod;
 
   const AnalysisScreen({
-    super.key, 
-    this.autoFishName, 
-    this.autoPrice, 
-    this.autoFcr, 
-    this.autoPeriod
+    super.key,
+    this.api,
+    this.autoFishName,
+    this.autoPrice,
+    this.autoFcr,
+    this.autoPeriod,
   });
 
   @override
-  State<AnalysisScreen> createState() => _AnalysisScreenState();
+  Widget build(BuildContext context) => SessionBoundary(
+    api: api,
+    private: true,
+    builder: (_) => _AnalysisScreenContent(
+      api: api,
+      autoFishName: autoFishName,
+      autoPrice: autoPrice,
+      autoFcr: autoFcr,
+      autoPeriod: autoPeriod,
+    ),
+  );
 }
 
-class _AnalysisScreenState extends State<AnalysisScreen> {
-  final ApiService _apiService = ApiService();
-  late Future<List<dynamic>> _fishList;
+class _AnalysisScreenContent extends StatefulWidget {
+  final String? autoFishName;
+  final String? autoPrice;
+  final String? autoFcr;
+  final String? autoPeriod;
+
+  final ApiService? api;
+  const _AnalysisScreenContent({
+    this.api,
+    this.autoFishName,
+    this.autoPrice,
+    this.autoFcr,
+    this.autoPeriod,
+  });
+
+  @override
+  State<_AnalysisScreenContent> createState() => _AnalysisScreenState();
+}
+
+class _AnalysisScreenState extends State<_AnalysisScreenContent>
+    with SessionOwnedState<_AnalysisScreenContent> {
+  late final ApiService _apiService = widget.api ?? ApiService();
+  @override
+  get stateSession => _apiService.session;
+  Future<ApiResult<List<dynamic>>> _loadReference(
+    Future<ApiResult<List<dynamic>>> Function({
+      required SessionSnapshot expectedSession,
+    })
+    fetch,
+  ) async {
+    try {
+      final owner = await _apiService.session.snapshot();
+      if (!sessionActive || owner.revision != _apiService.session.revision) {
+        return ApiResult.failure(
+          ApiFailure(kind: ApiErrorKind.staleSession, message: 'Sesi berubah.'),
+        );
+      }
+      return fetch(expectedSession: owner);
+    } catch (_) {
+      return ApiResult.failure(
+        ApiFailure(
+          kind: ApiErrorKind.session,
+          message: 'Data tidak dapat dimuat. Silakan coba kembali.',
+        ),
+      );
+    }
+  }
+
+  late Future<ApiResult<List<dynamic>>> _fishList;
 
   Map<String, dynamic>? _selectedFish;
   final TextEditingController _luasKolamController = TextEditingController();
   final TextEditingController _jumlahBibitController = TextEditingController();
-  final TextEditingController _hargaBibitController = TextEditingController(text: "200");
-  final TextEditingController _biayaLainController = TextEditingController(text: "0");
+  final TextEditingController _hargaBibitController = TextEditingController(
+    text: "200",
+  );
+  final TextEditingController _biayaLainController = TextEditingController(
+    text: "0",
+  );
 
   double _estimasiPanenKg = 0;
   double _kebutuhanPakanKg = 0;
@@ -39,33 +105,37 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   double _totalModal = 0;
   double _omzet = 0;
   double _keuntungan = 0;
-  
+
   String _statusKepadatan = "";
   Color _warnaStatusKepadatan = Colors.grey;
   bool _showResult = false;
 
   void _refreshFishList() {
     setState(() {
-      _fishList = _apiService.fetchFishTypes();
+      _fishList = _loadReference(_apiService.fetchFishTypes);
     });
   }
 
   @override
   void initState() {
     super.initState();
-    _refreshFishList(); 
+    _refreshFishList();
 
-    _fishList.then((dataSemuaIkan) {
+    _fishList.then((result) {
+      if (!result.isSuccess) return;
+      final dataSemuaIkan = result.data!;
+      if (!mounted || !sessionActive) return;
       if (widget.autoFishName != null) {
-        
         var ikanKetemu = dataSemuaIkan.firstWhere(
-          (ikan) => ikan['name'].toString().toLowerCase().contains(widget.autoFishName!.toLowerCase()),
-          orElse: () => null
+          (ikan) => ikan['name'].toString().toLowerCase().contains(
+            widget.autoFishName!.toLowerCase(),
+          ),
+          orElse: () => null,
         );
 
         if (ikanKetemu != null) {
           setState(() {
-            _selectedFish = ikanKetemu; 
+            _selectedFish = ikanKetemu;
           });
         }
       }
@@ -94,18 +164,34 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       } else {
         hargaBibitOtomatis = "500";
       }
-      
+
       _hargaBibitController.text = hargaBibitOtomatis;
     }
   }
 
   String formatRupiah(double number) {
-    final formatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+    final formatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
     return formatter.format(number);
   }
 
+  @override
+  void dispose() {
+    _selectedFish = null;
+    _luasKolamController.dispose();
+    _jumlahBibitController.dispose();
+    _hargaBibitController.dispose();
+    _biayaLainController.dispose();
+    super.dispose();
+  }
+
   void _hitungAnalisa() {
-    if (_selectedFish == null || _jumlahBibitController.text.isEmpty || _luasKolamController.text.isEmpty) {
+    if (_selectedFish == null ||
+        _jumlahBibitController.text.isEmpty ||
+        _luasKolamController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Harap lengkapi semua data input!")),
       );
@@ -113,29 +199,46 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
 
     try {
-      double luasKolam = double.parse(_luasKolamController.text.replaceAll('.', ''));
-      double jumlahBibit = double.parse(_jumlahBibitController.text.replaceAll('.', ''));
-      double hargaBibitPerEkor = double.parse(_hargaBibitController.text.replaceAll('.', ''));
-      double biayaLainInput = double.parse(_biayaLainController.text.replaceAll('.', ''));
-      
+      double luasKolam = double.parse(
+        _luasKolamController.text.replaceAll('.', ''),
+      );
+      double jumlahBibit = double.parse(
+        _jumlahBibitController.text.replaceAll('.', ''),
+      );
+      double hargaBibitPerEkor = double.parse(
+        _hargaBibitController.text.replaceAll('.', ''),
+      );
+      double biayaLainInput = double.parse(
+        _biayaLainController.text.replaceAll('.', ''),
+      );
+
       double fcr = double.parse(_selectedFish!['fcr_ratio'].toString());
-      double sr = double.parse(_selectedFish!['survival_rate'].toString()); 
-      double hargaPakan = double.parse(_selectedFish!['feed_price_per_kg'].toString());
-      double hargaJual = double.parse(_selectedFish!['market_price_per_kg'].toString());
-      double maxPadat = double.parse(_selectedFish!['standard_density_per_m2'].toString());
+      double sr = double.parse(_selectedFish!['survival_rate'].toString());
+      double hargaPakan = double.parse(
+        _selectedFish!['feed_price_per_kg'].toString(),
+      );
+      double hargaJual = double.parse(
+        _selectedFish!['market_price_per_kg'].toString(),
+      );
+      double maxPadat = double.parse(
+        _selectedFish!['standard_density_per_m2'].toString(),
+      );
 
       double kepadatanAktual = jumlahBibit / luasKolam;
       String status;
       Color warna;
 
       if (kepadatanAktual > maxPadat) {
-        status = "BERISIKO TINGGI (Kepadatan ${kepadatanAktual.toStringAsFixed(0)} ekor/m²)";
+        status =
+            "BERISIKO TINGGI (Kepadatan ${kepadatanAktual.toStringAsFixed(0)} ekor/m²)";
         warna = Colors.red;
       } else if (kepadatanAktual > (maxPadat * 0.8)) {
-        status = "CUKUP PADAT (Kepadatan ${kepadatanAktual.toStringAsFixed(0)} ekor/m²)";
+        status =
+            "CUKUP PADAT (Kepadatan ${kepadatanAktual.toStringAsFixed(0)} ekor/m²)";
         warna = Colors.orange;
       } else {
-        status = "IDEAL (Kepadatan ${kepadatanAktual.toStringAsFixed(0)} ekor/m²)";
+        status =
+            "IDEAL (Kepadatan ${kepadatanAktual.toStringAsFixed(0)} ekor/m²)";
         warna = Colors.green;
       }
 
@@ -176,7 +279,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: Text("Analisa Usaha", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: Text(
+          "Analisa Usaha",
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
         backgroundColor: const Color(0xFF009FE3),
         elevation: 0,
         leading: IconButton(
@@ -191,25 +300,46 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           children: [
             Card(
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Parameter Input", style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(
+                      "Parameter Input",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 15),
-                    
-                    FutureBuilder<List<dynamic>>(
+
+                    ReferenceListBuilder(
                       future: _fishList,
+                      retry: () => _loadReference(_apiService.fetchFishTypes),
                       builder: (context, snapshot) {
-                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                        
+                        if (!snapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+
+                        if (snapshot.data!.isEmpty) {
+                          return const Text('Belum ada data ikan.');
+                        }
                         return DropdownButtonFormField<Map<String, dynamic>>(
                           decoration: InputDecoration(
                             labelText: "Pilih Komoditas",
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 15,
+                              vertical: 15,
+                            ),
                           ),
                           initialValue: _selectedFish,
                           items: snapshot.data!.map((fish) {
@@ -221,7 +351,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                           onChanged: (value) {
                             setState(() {
                               _selectedFish = value;
-                              _showResult = false; 
+                              _showResult = false;
                             });
                           },
                         );
@@ -238,7 +368,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                             decoration: InputDecoration(
                               labelText: "Luas Kolam",
                               hintText: "m²",
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                               suffixText: "m²",
                             ),
                           ),
@@ -251,7 +383,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                             decoration: InputDecoration(
                               labelText: "Jumlah Bibit",
                               hintText: "Ekor",
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                               suffixText: "Ekor",
                             ),
                           ),
@@ -266,7 +400,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       decoration: InputDecoration(
                         labelText: "Harga Bibit per Ekor",
                         prefixText: "Rp ",
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 15),
@@ -277,7 +413,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       decoration: InputDecoration(
                         labelText: "Biaya Operasional (Listrik/Obat)",
                         prefixText: "Rp ",
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -289,9 +427,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         onPressed: _hitungAnalisa,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF009FE3),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
-                        child: Text("HITUNG ANALISA", style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                        child: Text(
+                          "HITUNG ANALISA",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -302,12 +449,21 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             const SizedBox(height: 20),
 
             if (_showResult) ...[
-              Text("Hasil Analisa", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                "Hasil Analisa",
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 10),
 
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 15,
+                ),
                 decoration: BoxDecoration(
                   color: _warnaStatusKepadatan.withOpacity(0.1),
                   border: Border.all(color: _warnaStatusKepadatan),
@@ -320,20 +476,32 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     Expanded(
                       child: Text(
                         _statusKepadatan,
-                        style: GoogleFonts.poppins(color: _warnaStatusKepadatan, fontWeight: FontWeight.bold, fontSize: 12),
+                        style: GoogleFonts.poppins(
+                          color: _warnaStatusKepadatan,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 15),
-              
+
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF8CC63F), Color(0xFF6A9E25)]),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8CC63F), Color(0xFF6A9E25)],
+                  ),
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: Colors.green.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.green.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -341,52 +509,118 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Estimasi Keuntungan Bersih", style: GoogleFonts.poppins(color: Colors.white, fontSize: 12)),
+                        Text(
+                          "Estimasi Keuntungan Bersih",
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
                         const SizedBox(height: 5),
-                        Text(formatRupiah(_keuntungan), style: GoogleFonts.poppins(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                        Text(
+                          formatRupiah(_keuntungan),
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
-                    const Icon(Icons.monetization_on, color: Colors.white, size: 36),
+                    const Icon(
+                      Icons.monetization_on,
+                      color: Colors.white,
+                      size: 36,
+                    ),
                   ],
                 ),
               ),
-              
+
               const SizedBox(height: 15),
 
               Row(
                 children: [
-                  Expanded(child: _buildInfoCard("Total Modal", formatRupiah(_totalModal), Icons.account_balance_wallet, Colors.orange)),
+                  Expanded(
+                    child: _buildInfoCard(
+                      "Total Modal",
+                      formatRupiah(_totalModal),
+                      Icons.account_balance_wallet,
+                      Colors.orange,
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  Expanded(child: _buildInfoCard("Est. Omzet", formatRupiah(_omzet), Icons.store, Colors.blue)),
+                  Expanded(
+                    child: _buildInfoCard(
+                      "Est. Omzet",
+                      formatRupiah(_omzet),
+                      Icons.store,
+                      Colors.blue,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
-               Row(
+              Row(
                 children: [
-                  Expanded(child: _buildInfoCard("Biaya Pakan", formatRupiah(_biayaPakan), Icons.restaurant, Colors.redAccent)),
+                  Expanded(
+                    child: _buildInfoCard(
+                      "Biaya Pakan",
+                      formatRupiah(_biayaPakan),
+                      Icons.restaurant,
+                      Colors.redAccent,
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  Expanded(child: _buildInfoCard("Biaya Bibit", formatRupiah(_biayaBibit), Icons.spa, Colors.teal)),
+                  Expanded(
+                    child: _buildInfoCard(
+                      "Biaya Bibit",
+                      formatRupiah(_biayaBibit),
+                      Icons.spa,
+                      Colors.teal,
+                    ),
+                  ),
                 ],
               ),
 
               const SizedBox(height: 20),
-              
-              Text("Rincian Teknis", style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+
+              Text(
+                "Rincian Teknis",
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 child: Column(
                   children: [
-                    _buildTechnicalRow("Biaya Operasional", formatRupiah(_biayaLain)),
+                    _buildTechnicalRow(
+                      "Biaya Operasional",
+                      formatRupiah(_biayaLain),
+                    ),
                     const Divider(),
-                    _buildTechnicalRow("Total Pakan", "${_kebutuhanPakanKg.toStringAsFixed(1)} Kg"),
+                    _buildTechnicalRow(
+                      "Total Pakan",
+                      "${_kebutuhanPakanKg.toStringAsFixed(1)} Kg",
+                    ),
                     const Divider(),
-                    _buildTechnicalRow("Est. Panen", "${_estimasiPanenKg.toStringAsFixed(1)} Kg"),
+                    _buildTechnicalRow(
+                      "Est. Panen",
+                      "${_estimasiPanenKg.toStringAsFixed(1)} Kg",
+                    ),
                     const Divider(),
                     _buildTechnicalRow("FCR", "${_selectedFish!['fcr_ratio']}"),
                     const Divider(),
-                    _buildTechnicalRow("SR", "${_selectedFish!['survival_rate']}%"),
+                    _buildTechnicalRow(
+                      "SR",
+                      "${_selectedFish!['survival_rate']}%",
+                    ),
                   ],
                 ),
               ),
@@ -398,7 +632,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     );
   }
 
-  Widget _buildInfoCard(String title, String value, IconData icon, Color color) {
+  Widget _buildInfoCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
@@ -411,8 +650,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         children: [
           Icon(icon, color: color, size: 24),
           const SizedBox(height: 10),
-          Text(title, style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600])),
-          Text(value, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87)),
+          Text(
+            title,
+            style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600]),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
         ],
       ),
     );
@@ -424,8 +673,17 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: GoogleFonts.poppins(color: Colors.grey[700], fontSize: 13)),
-          Text(value, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(
+            label,
+            style: GoogleFonts.poppins(color: Colors.grey[700], fontSize: 13),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
         ],
       ),
     );

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../widgets/session_boundary.dart';
+import '../services/api_service.dart';
 
 class BeritaDetailScreen extends StatelessWidget {
   final String title;
   final String content;
   final String date;
   final String imageUrl;
+  final ApiService? api;
 
   const BeritaDetailScreen({
     super.key,
+    this.api,
     required this.title,
     required this.content,
     required this.date,
@@ -16,13 +20,20 @@ class BeritaDetailScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      SessionBoundary(api: api, builder: _buildContent);
+
+  Widget _buildContent(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
           'Detail Berita',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            fontSize: 18,
+          ),
         ),
         backgroundColor: const Color(0xFF009FE3),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -38,7 +49,8 @@ class BeritaDetailScreen extends StatelessWidget {
                     width: double.infinity,
                     height: 250,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => _buildPlaceholderImage(),
+                    errorBuilder: (context, error, stackTrace) =>
+                        _buildPlaceholderImage(),
                   )
                 : _buildPlaceholderImage(),
 
@@ -49,11 +61,18 @@ class BeritaDetailScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                      const Icon(
+                        Icons.calendar_today,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         date,
-                        style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600]),
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
                       ),
                     ],
                   ),
@@ -75,7 +94,7 @@ class BeritaDetailScreen extends StatelessWidget {
                     style: GoogleFonts.poppins(
                       fontSize: 15,
                       color: Colors.black87,
-                      height: 1.6, 
+                      height: 1.6,
                     ),
                   ),
                   const SizedBox(height: 40),

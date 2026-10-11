@@ -1,30 +1,79 @@
+import '../widgets/reference_list_builder.dart';
+import '../services/api_result.dart';
+import '../services/session_service.dart';
+import '../widgets/session_boundary.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import 'analysis_screen.dart';
 
-class SemuaKomoditasScreen extends StatefulWidget {
-  const SemuaKomoditasScreen({super.key});
+class SemuaKomoditasScreen extends StatelessWidget {
+  const SemuaKomoditasScreen({super.key, this.api});
+  final ApiService? api;
 
   @override
-  State<SemuaKomoditasScreen> createState() => _SemuaKomoditasScreenState();
+  Widget build(BuildContext context) => SessionBoundary(
+    api: api,
+    private: true,
+    builder: (_) => _SemuaKomoditasScreenContent(api: api),
+  );
 }
 
-class _SemuaKomoditasScreenState extends State<SemuaKomoditasScreen> {
-  final ApiService _apiService = ApiService();
-  late Future<List<dynamic>> _fishList;
+class _SemuaKomoditasScreenContent extends StatefulWidget {
+  const _SemuaKomoditasScreenContent({this.api});
+  final ApiService? api;
+
+  @override
+  State<_SemuaKomoditasScreenContent> createState() =>
+      _SemuaKomoditasScreenState();
+}
+
+class _SemuaKomoditasScreenState extends State<_SemuaKomoditasScreenContent>
+    with SessionOwnedState<_SemuaKomoditasScreenContent> {
+  late final ApiService _apiService = widget.api ?? ApiService();
+  @override
+  get stateSession => _apiService.session;
+  Future<ApiResult<List<dynamic>>> _loadReference(
+    Future<ApiResult<List<dynamic>>> Function({
+      required SessionSnapshot expectedSession,
+    })
+    fetch,
+  ) async {
+    try {
+      final owner = await _apiService.session.snapshot();
+      if (!sessionActive || owner.revision != _apiService.session.revision) {
+        return ApiResult.failure(
+          ApiFailure(kind: ApiErrorKind.staleSession, message: 'Sesi berubah.'),
+        );
+      }
+      return fetch(expectedSession: owner);
+    } catch (_) {
+      return ApiResult.failure(
+        ApiFailure(
+          kind: ApiErrorKind.session,
+          message: 'Data tidak dapat dimuat. Silakan coba kembali.',
+        ),
+      );
+    }
+  }
+
+  late Future<ApiResult<List<dynamic>>> _fishList;
 
   @override
   void initState() {
     super.initState();
-    _fishList = _apiService.fetchFishTypes();
+    _fishList = _loadReference(_apiService.fetchFishTypes);
   }
 
   String formatRupiah(dynamic price) {
     try {
       double priceDouble = double.parse(price.toString());
-      final formatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+      final formatter = NumberFormat.currency(
+        locale: 'id_ID',
+        symbol: 'Rp ',
+        decimalDigits: 0,
+      );
       return formatter.format(priceDouble);
     } catch (e) {
       return "Rp -";
@@ -38,7 +87,13 @@ class _SemuaKomoditasScreenState extends State<SemuaKomoditasScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: Text("Semua Komoditas", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: Text(
+          "Semua Komoditas",
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
         backgroundColor: indramayuBlue,
         elevation: 0,
         leading: IconButton(
@@ -46,11 +101,14 @@ class _SemuaKomoditasScreenState extends State<SemuaKomoditasScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: FutureBuilder<List<dynamic>>(
+      body: ReferenceListBuilder(
         future: _fishList,
+        retry: () => _loadReference(_apiService.fetchFishTypes),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator(color: indramayuBlue));
+            return Center(
+              child: CircularProgressIndicator(color: indramayuBlue),
+            );
           } else if (snapshot.hasError) {
             return const Center(child: Text("Gagal memuat data."));
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
@@ -74,15 +132,21 @@ class _SemuaKomoditasScreenState extends State<SemuaKomoditasScreen> {
                     context,
                     MaterialPageRoute(
                       builder: (context) => AnalysisScreen(
-                        autoFishName: nama,            
-                        autoPrice: harga.toString(),  
-                        autoFcr: fcr,                
-                        autoPeriod: panen,         
+                        autoFishName: nama,
+                        autoPrice: harga.toString(),
+                        autoFcr: fcr,
+                        autoPeriod: panen,
                       ),
                     ),
                   );
                 },
-                child: _buildCommodityCard(nama, "FCR $fcr • Panen $panen Hari", formatRupiah(harga), indramayuBlue, imageUrl),
+                child: _buildCommodityCard(
+                  nama,
+                  "FCR $fcr • Panen $panen Hari",
+                  formatRupiah(harga),
+                  indramayuBlue,
+                  imageUrl,
+                ),
               );
             },
           );
@@ -91,7 +155,13 @@ class _SemuaKomoditasScreenState extends State<SemuaKomoditasScreen> {
     );
   }
 
-  Widget _buildCommodityCard(String name, String specs, String price, Color accentColor, String? imageUrl) {
+  Widget _buildCommodityCard(
+    String name,
+    String specs,
+    String price,
+    Color accentColor,
+    String? imageUrl,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12, left: 24, right: 24),
       padding: const EdgeInsets.all(16),
@@ -99,17 +169,32 @@ class _SemuaKomoditasScreenState extends State<SemuaKomoditasScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.withOpacity(0.1)),
-        boxShadow: [BoxShadow(color: const Color(0xFF009FE3).withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))],
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF009FE3).withOpacity(0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            height: 54, width: 54,
-            decoration: BoxDecoration(color: accentColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+            height: 54,
+            width: 54,
+            decoration: BoxDecoration(
+              color: accentColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: imageUrl != null && imageUrl.isNotEmpty
-                  ? Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (ctx, err, stack) => Icon(Icons.water_drop, color: accentColor))
+                  ? Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, err, stack) =>
+                          Icon(Icons.water_drop, color: accentColor),
+                    )
                   : Icon(Icons.water_drop, color: accentColor),
             ),
           ),
@@ -118,17 +203,40 @@ class _SemuaKomoditasScreenState extends State<SemuaKomoditasScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87)),
+                Text(
+                  name,
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(specs, style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[500])),
+                Text(
+                  specs,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.grey[500],
+                  ),
+                ),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text("Harga Pasar", style: GoogleFonts.poppins(fontSize: 9, color: Colors.grey)),
-              Text(price, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: accentColor)),
+              Text(
+                "Harga Pasar",
+                style: GoogleFonts.poppins(fontSize: 9, color: Colors.grey),
+              ),
+              Text(
+                price,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: accentColor,
+                ),
+              ),
             ],
           ),
         ],

@@ -1,15 +1,40 @@
+import '../widgets/session_boundary.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../services/api_service.dart';
 
 class InfoDinasDetailScreen extends StatelessWidget {
   final Map<String, dynamic> post;
+  final ApiService? api;
 
-  const InfoDinasDetailScreen({super.key, required this.post});
+  const InfoDinasDetailScreen({super.key, required this.post, this.api});
 
-  String formatDate(String dateString) {
+  String formatDate(String? dateString) {
     try {
-      DateTime date = DateTime.parse(dateString);
+      DateTime date = DateTime.parse(dateString ?? '');
+      return DateFormat('dd MMMM yyyy').format(date);
+    } catch (e) {
+      return "-";
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SessionBoundary(
+    api: api,
+    private: true,
+    builder: (_) => _InfoDinasDetailScreenContent(post: post),
+  );
+}
+
+class _InfoDinasDetailScreenContent extends StatelessWidget {
+  final Map<String, dynamic> post;
+
+  const _InfoDinasDetailScreenContent({required this.post});
+
+  String formatDate(String? dateString) {
+    try {
+      DateTime date = DateTime.parse(dateString ?? '');
       return DateFormat('dd MMMM yyyy').format(date);
     } catch (e) {
       return "-";
@@ -18,9 +43,7 @@ class InfoDinasDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String imageUrl = post['image'] != null 
-        ? "https://aquara.app/storage/${post['image']}" 
-        : "https://via.placeholder.com/600x400";
+    String imageUrl = post['image_url'] ?? '';
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -33,15 +56,27 @@ class InfoDinasDetailScreen extends StatelessWidget {
             pinned: true,
             backgroundColor: const Color(0xFF009FE3),
             flexibleSpace: FlexibleSpaceBar(
-              background: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (ctx, err, stack) => Container(color: Colors.grey, child: const Icon(Icons.broken_image, size: 50, color: Colors.white)),
-              ),
+              background: imageUrl.isEmpty
+                  ? const Icon(Icons.image_not_supported_outlined)
+                  : Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, err, stack) => Container(
+                        color: Colors.grey,
+                        child: const Icon(
+                          Icons.broken_image,
+                          size: 50,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
             ),
             leading: Container(
               margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(50)),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(50),
+              ),
               child: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () => Navigator.pop(context),
@@ -61,14 +96,37 @@ class InfoDinasDetailScreen extends StatelessWidget {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(color: const Color(0xFF009FE3).withOpacity(0.1), borderRadius: BorderRadius.circular(5)),
-                          child: Text(post['category'], style: GoogleFonts.poppins(color: const Color(0xFF009FE3), fontWeight: FontWeight.bold, fontSize: 12)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF009FE3).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            post['category'],
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFF009FE3),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 10),
-                        Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
+                        Icon(
+                          Icons.calendar_today,
+                          size: 14,
+                          color: Colors.grey[500],
+                        ),
                         const SizedBox(width: 5),
-                        Text(formatDate(post['created_at']), style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12)),
+                        Text(
+                          formatDate(post['created_at']),
+                          style: GoogleFonts.poppins(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 15),
@@ -76,7 +134,11 @@ class InfoDinasDetailScreen extends StatelessWidget {
                     // Judul Besar
                     Text(
                       post['title'],
-                      style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold, height: 1.3),
+                      style: GoogleFonts.poppins(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        height: 1.3,
+                      ),
                     ),
                     const SizedBox(height: 10),
 
@@ -86,10 +148,20 @@ class InfoDinasDetailScreen extends StatelessWidget {
                         const CircleAvatar(
                           radius: 12,
                           backgroundColor: Color(0xFF009FE3),
-                          child: Icon(Icons.person, size: 14, color: Colors.white),
+                          child: Icon(
+                            Icons.person,
+                            size: 14,
+                            color: Colors.white,
+                          ),
                         ),
                         const SizedBox(width: 8),
-                        Text("Diposting oleh: ${post['author']}", style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[700])),
+                        Text(
+                          "Diposting oleh: ${post['author']}",
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.grey[700],
+                          ),
+                        ),
                       ],
                     ),
                     const Divider(height: 40),
@@ -97,7 +169,11 @@ class InfoDinasDetailScreen extends StatelessWidget {
                     // ISI KONTEN (DESKRIPSI LENGKAP)
                     Text(
                       post['content'],
-                      style: GoogleFonts.poppins(fontSize: 14, height: 1.8, color: Colors.grey[800]),
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        height: 1.8,
+                        color: Colors.grey[800],
+                      ),
                       textAlign: TextAlign.justify,
                     ),
                     const SizedBox(height: 50),

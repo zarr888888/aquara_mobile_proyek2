@@ -1,3 +1,7 @@
+import '../widgets/reference_list_builder.dart';
+import '../services/api_result.dart';
+import '../services/session_service.dart';
+import '../widgets/session_boundary.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -5,27 +9,66 @@ import 'package:url_launcher/url_launcher.dart'; // 🚀 FITUR BARU BUKA BROWSER
 import '../services/api_service.dart';
 import 'berita_detail_screen.dart';
 
-class BeritaScreen extends StatefulWidget {
-  const BeritaScreen({super.key});
+class BeritaScreen extends StatelessWidget {
+  const BeritaScreen({super.key, this.api});
+  final ApiService? api;
+
+  @override
+  Widget build(BuildContext context) => SessionBoundary(
+    api: api,
+    private: false,
+    builder: (_) => _BeritaScreenContent(api: api),
+  );
+}
+
+class _BeritaScreenContent extends StatefulWidget {
+  const _BeritaScreenContent({this.api});
+  final ApiService? api;
 
   @override
   _BeritaScreenState createState() => _BeritaScreenState();
 }
 
-class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderStateMixin {
+class _BeritaScreenState extends State<_BeritaScreenContent>
+    with
+        SingleTickerProviderStateMixin,
+        SessionOwnedState<_BeritaScreenContent> {
   late TabController _tabController;
-  final ApiService _apiService = ApiService();
-  
-  late Future<List<dynamic>> _postsFuture;
-  late Future<List<dynamic>> _beritaNasionalFuture;
+  late final ApiService _apiService = widget.api ?? ApiService();
+  @override
+  get stateSession => _apiService.session;
+  Future<ApiResult<List<dynamic>>> _loadReference(
+    Future<ApiResult<List<dynamic>>> Function({
+      required SessionSnapshot expectedSession,
+    })
+    fetch,
+  ) async {
+    try {
+      final owner = await _apiService.session.snapshot();
+      if (!sessionActive || owner.revision != _apiService.session.revision) {
+        return ApiResult.failure(
+          ApiFailure(kind: ApiErrorKind.staleSession, message: 'Sesi berubah.'),
+        );
+      }
+      return fetch(expectedSession: owner);
+    } catch (_) {
+      return ApiResult.failure(
+        ApiFailure(
+          kind: ApiErrorKind.session,
+          message: 'Data tidak dapat dimuat. Silakan coba kembali.',
+        ),
+      );
+    }
+  }
 
-  final String storageUrl = 'https://aquara.app/storage/';
+  late Future<ApiResult<List<dynamic>>> _postsFuture;
+  late Future<List<dynamic>> _beritaNasionalFuture;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _postsFuture = _apiService.fetchPosts();
+    _postsFuture = _loadReference(_apiService.fetchPosts);
     _beritaNasionalFuture = _apiService.fetchBeritaNasional();
   }
 
@@ -38,9 +81,9 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
   String formatTanggal(String dateString) {
     try {
       DateTime dt = DateTime.parse(dateString);
-      return DateFormat('dd MMM yyyy').format(dt); 
+      return DateFormat('dd MMM yyyy').format(dt);
     } catch (e) {
-      return dateString.substring(0, 10);
+      return '-';
     }
   }
 
@@ -56,7 +99,10 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
       appBar: AppBar(
         title: Text(
           'Berita & Informasi',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
         backgroundColor: const Color(0xFF009FE3),
         elevation: 0,
@@ -64,8 +110,13 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
           controller: _tabController,
           indicatorColor: Colors.white,
           indicatorWeight: 4,
-          labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14),
-          unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.normal),
+          labelStyle: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+          unselectedLabelStyle: GoogleFonts.poppins(
+            fontWeight: FontWeight.normal,
+          ),
           tabs: const [
             Tab(text: 'Info Diskanla'),
             Tab(text: 'Kementerian & Umum'),
@@ -75,23 +126,40 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildBeritaList(_postsFuture, true),
+          ReferenceListBuilder(
+            future: _postsFuture,
+            retry: () => _loadReference(_apiService.fetchPosts),
+            builder: (context, snapshot) =>
+                _buildBeritaList(Future.value(snapshot.data!), true),
+          ),
           _buildBeritaList(_beritaNasionalFuture, false),
         ],
       ),
     );
   }
 
-  Widget _buildBeritaList(Future<List<dynamic>> sumberData, bool isDariLaravel) {
+  Widget _buildBeritaList(
+    Future<List<dynamic>> sumberData,
+    bool isDariLaravel,
+  ) {
     return FutureBuilder<List<dynamic>>(
       future: sumberData,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFF009FE3)));
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF009FE3)),
+          );
         } else if (snapshot.hasError) {
-          return Center(child: Text("Gagal memuat berita.", style: GoogleFonts.poppins()));
+          return Center(
+            child: Text("Gagal memuat berita.", style: GoogleFonts.poppins()),
+          );
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(child: Text("Belum ada berita hari ini.", style: GoogleFonts.poppins()));
+          return Center(
+            child: Text(
+              "Belum ada berita hari ini.",
+              style: GoogleFonts.poppins(),
+            ),
+          );
         }
 
         return ListView.builder(
@@ -99,33 +167,54 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
           itemCount: snapshot.data!.length,
           itemBuilder: (context, index) {
             var berita = snapshot.data![index];
-            
+
             String judul = berita['title'] ?? 'Tanpa Judul';
             String tanggal = '-';
             String isi = '';
             String imageUrl = '';
-            String linkAsli = ''; 
+            String linkAsli = '';
 
             if (isDariLaravel) {
               isi = berita['content'] ?? '';
-              tanggal = berita['created_at'] != null ? formatTanggal(berita['created_at']) : '-';
-              imageUrl = berita['image'] != null ? storageUrl + berita['image'] : '';
+              tanggal = berita['created_at'] != null
+                  ? formatTanggal(berita['created_at'])
+                  : '-';
+              imageUrl = berita['image_url'] ?? '';
             } else {
               isi = bersihkanHtml(berita['description'] ?? '');
-              tanggal = berita['pubDate'] != null ? formatTanggal(berita['pubDate']) : '-';
-              linkAsli = berita['link'] ?? ''; 
-              
-              imageUrl = 'https://dummyimage.com/800x400/009FE3/ffffff.png&text=Kementerian+%26+Umum';
+              tanggal = berita['pubDate'] != null
+                  ? formatTanggal(berita['pubDate'])
+                  : '-';
+              linkAsli = berita['link'] ?? '';
+
+              imageUrl =
+                  'https://dummyimage.com/800x400/009FE3/ffffff.png&text=Kementerian+%26+Umum';
             }
 
-            return _buildBeritaCard(context, judul, isi, tanggal, imageUrl, isDariLaravel, linkAsli);
+            return _buildBeritaCard(
+              context,
+              judul,
+              isi,
+              tanggal,
+              imageUrl,
+              isDariLaravel,
+              linkAsli,
+            );
           },
         );
       },
     );
   }
 
-  Widget _buildBeritaCard(BuildContext context, String title, String content, String date, String imageUrl, bool isDariLaravel, String linkAsli) {
+  Widget _buildBeritaCard(
+    BuildContext context,
+    String title,
+    String content,
+    String date,
+    String imageUrl,
+    bool isDariLaravel,
+    String linkAsli,
+  ) {
     return InkWell(
       onTap: () async {
         if (isDariLaravel) {
@@ -133,7 +222,11 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
             context,
             MaterialPageRoute(
               builder: (context) => BeritaDetailScreen(
-                title: title, content: content, date: date, imageUrl: imageUrl,
+                api: _apiService,
+                title: title,
+                content: content,
+                date: date,
+                imageUrl: imageUrl,
               ),
             ),
           );
@@ -141,8 +234,10 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
           if (linkAsli.isNotEmpty) {
             final Uri url = Uri.parse(linkAsli);
             if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal membuka browser')));
+              if (!context.mounted || !sessionActive) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Gagal membuka browser')),
+              );
             }
           }
         }
@@ -153,7 +248,11 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
         child: ClipRRect(
@@ -167,10 +266,11 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
                       height: 180,
                       width: double.infinity,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => _buildPlaceholderImage(),
+                      errorBuilder: (context, error, stackTrace) =>
+                          _buildPlaceholderImage(),
                     )
                   : _buildPlaceholderImage(),
-              
+
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -178,29 +278,56 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
+                        const Icon(
+                          Icons.calendar_today,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
                         const SizedBox(width: 6),
-                        Text(date, style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600])),
+                        Text(
+                          date,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 10),
                     Text(
                       title,
-                      style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
-                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      isDariLaravel ? content : "Baca berita selengkapnya di website resmi...",
-                      style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
-                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      isDariLaravel
+                          ? content
+                          : "Baca berita selengkapnya di website resmi...",
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 16),
                     Align(
                       alignment: Alignment.centerRight,
                       child: Text(
-                        isDariLaravel ? "Baca Selengkapnya >>" : "Buka Sumber >>",
-                        style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF009FE3)),
+                        isDariLaravel
+                            ? "Baca Selengkapnya >>"
+                            : "Buka Sumber >>",
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF009FE3),
+                        ),
                       ),
                     ),
                   ],
@@ -215,12 +342,17 @@ class _BeritaScreenState extends State<BeritaScreen> with SingleTickerProviderSt
 
   Widget _buildPlaceholderImage() {
     return Container(
-      height: 180, width: double.infinity, color: Colors.blue[50],
+      height: 180,
+      width: double.infinity,
+      color: Colors.blue[50],
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.image_outlined, size: 50, color: Colors.blue[200]),
-          Text("Memuat foto...", style: GoogleFonts.poppins(color: Colors.blue[300], fontSize: 12))
+          Text(
+            "Memuat foto...",
+            style: GoogleFonts.poppins(color: Colors.blue[300], fontSize: 12),
+          ),
         ],
       ),
     );

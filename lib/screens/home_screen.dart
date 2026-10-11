@@ -1,3 +1,8 @@
+import '../widgets/reference_list_builder.dart';
+import '../services/api_result.dart';
+import '../widgets/session_boundary.dart';
+import '../services/session_service.dart';
+import '../models/reference_data.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,55 +14,112 @@ import 'market_price_screen.dart';
 import 'info_dinas_screen.dart';
 import 'forum_screen.dart';
 import 'consultation_screen.dart';
-import 'berita_screen.dart'; 
+import 'berita_screen.dart';
 import 'pasar_screen.dart';
-import 'login_screen.dart'; 
+import 'login_screen.dart';
 import 'profil_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'semua_komoditas_screen.dart';
 import 'notifikasi_screen.dart';
+import 'sos_screen.dart';
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key, this.api});
+  final ApiService? api;
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  Widget build(BuildContext context) => SessionBoundary(
+    api: api,
+    private: false,
+    builder: (_) => _HomeScreenContent(api: api),
+  );
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  final ApiService _apiService = ApiService();
-  late Future<List<dynamic>> _fishList;
+class _HomeScreenContent extends StatefulWidget {
+  const _HomeScreenContent({this.api});
+  final ApiService? api;
+
+  @override
+  State<_HomeScreenContent> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<_HomeScreenContent>
+    with SessionOwnedState<_HomeScreenContent> {
+  late final ApiService _apiService = widget.api ?? ApiService();
+  @override
+  get stateSession => _apiService.session;
+  Future<ApiResult<List<dynamic>>> _loadReference(
+    Future<ApiResult<List<dynamic>>> Function({
+      required SessionSnapshot expectedSession,
+    })
+    fetch,
+  ) async {
+    try {
+      final owner = await _apiService.session.snapshot();
+      if (!sessionActive || owner.revision != _apiService.session.revision) {
+        return ApiResult.failure(
+          ApiFailure(kind: ApiErrorKind.staleSession, message: 'Sesi berubah.'),
+        );
+      }
+      return fetch(expectedSession: owner);
+    } catch (_) {
+      return ApiResult.failure(
+        ApiFailure(
+          kind: ApiErrorKind.session,
+          message: 'Data tidak dapat dimuat. Silakan coba kembali.',
+        ),
+      );
+    }
+  }
+
+  late Future<ApiResult<List<dynamic>>> _fishList;
 
   int _selectedIndex = 0;
-  bool _isLoggedIn = false; 
+  bool _isLoggedIn = false;
   String _userName = "";
   String _fotoProfil = "";
 
-  final PageController _bannerController = PageController(viewportFraction: 0.92);
-  
+  final PageController _bannerController = PageController(
+    viewportFraction: 0.92,
+  );
+
   final List<String> _bannerImages = [
-    'assets/banner_analisausaha.png', 
-    'assets/banner_hargapasar.png', 
-    'assets/banner_forum.png', 
+    'assets/banner_analisausaha.png',
+    'assets/banner_hargapasar.png',
+    'assets/banner_forum.png',
     'assets/banner konsultasi ai.png',
   ];
 
   int _currentBannerIndex = 0;
 
   Timer? _bannerTimer;
+  StreamSubscription<int>? _metadataSubscription;
+  bool _sosOpen = false;
+
+  Future<void> _openSos() async {
+    if (!sessionActive || _sosOpen) return;
+    _sosOpen = true;
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(builder: (_) => SosScreen(api: _apiService)),
+      );
+    } finally {
+      if (sessionActive) _sosOpen = false;
+    }
+  }
 
   void _startAutoSlide() {
     _bannerTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (_bannerController.hasClients) {
         int nextPage = _currentBannerIndex + 1;
-        
+
         if (nextPage >= _bannerImages.length) {
           nextPage = 0;
         }
-        
+
         _bannerController.animateToPage(
           nextPage,
-          duration: const Duration(milliseconds: 500), 
+          duration: const Duration(milliseconds: 500),
           curve: Curves.easeInOut,
         );
       }
@@ -74,31 +136,40 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _fishList = _apiService.fetchFishTypes();
+    _fishList = _loadReference(_apiService.fetchFishTypes);
     _checkLoginStatus();
+    _metadataSubscription = _apiService.session.changes.listen((_) {
+      if (sessionActive) _checkLoginStatus();
+    });
     _startAutoSlide();
   }
 
   @override
   void dispose() {
     _bannerTimer?.cancel();
-    _bannerController.dispose(); 
+    _metadataSubscription?.cancel();
+    _bannerController.dispose();
     super.dispose();
   }
 
   Future<void> _checkLoginStatus() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    if (!mounted || !sessionActive) return;
+    final metadata = _apiService.session.metadata;
     setState(() {
-      _isLoggedIn = prefs.getString('token') != null;
-      _userName = prefs.getString('user_name') ?? "Pembudidaya"; 
-      _fotoProfil = prefs.getString('foto_profil') ?? "";
+      _isLoggedIn = _apiService.session.hasSession;
+      _userName = metadata['user_name'] ?? "Pembudidaya";
+      _fotoProfil = metadata['foto_profil'] ?? "";
     });
   }
 
   String formatRupiah(dynamic price) {
     try {
       double priceDouble = double.parse(price.toString());
-      final formatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+      final formatter = NumberFormat.currency(
+        locale: 'id_ID',
+        symbol: 'Rp ',
+        decimalDigits: 0,
+      );
       return formatter.format(priceDouble);
     } catch (e) {
       return "Rp -";
@@ -106,103 +177,164 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBeranda(Color indramayuBlue, Color indramayuGreen) {
+    _userName = _apiService.session.metadata['user_name'] ?? 'Pembudidaya';
+    _fotoProfil =
+        referenceImage({
+          'image': _apiService.session.metadata['foto_profil'],
+        }) ??
+        '';
     return SafeArea(
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            ListTile(
+              leading: const Icon(Icons.sos, color: Color(0xFF0079C3)),
+              title: const Text('SOS Bahari / Lapor Darurat'),
+              onTap: _openSos,
+            ),
             Container(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 30),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFF0079C3),
-                    indramayuBlue, 
-                  ],
+                  colors: [const Color(0xFF0079C3), indramayuBlue],
                 ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      if (_isLoggedIn) ...[
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedIndex = 3;
-                            });
-                          },
-                          child: Container(
-                            height: 46,
-                            width: 46,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
-                              color: Colors.white.withOpacity(0.2), 
-                              image: _fotoProfil.isNotEmpty 
-                                  ? DecorationImage(
-                                      image: NetworkImage("https://aquara.app/storage/$_fotoProfil"), 
-                                      fit: BoxFit.cover,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        if (_isLoggedIn) ...[
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedIndex = 3;
+                              });
+                            },
+                            child: Container(
+                              height: 46,
+                              width: 46,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.5),
+                                  width: 2,
+                                ),
+                                color: Colors.white.withOpacity(0.2),
+                              ),
+                              child: _fotoProfil.isEmpty
+                                  ? const Icon(
+                                      Icons.person,
+                                      color: Colors.white,
+                                      size: 28,
                                     )
-                                  : null, 
+                                  : ClipOval(
+                                      child: Image.network(
+                                        _fotoProfil,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => const Icon(
+                                          Icons.person,
+                                          color: Colors.white,
+                                          size: 28,
+                                        ),
+                                      ),
+                                    ),
                             ),
-                            child: _fotoProfil.isEmpty 
-                                ? const Icon(Icons.person, color: Colors.white, size: 28) 
-                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _isLoggedIn
+                                    ? "Hallo, $_userName "
+                                    : "Diskanla Indramayu",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontSize: 13,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                "AQUARA",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 12),
                       ],
-                      
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _isLoggedIn ? "Hallo, $_userName " : "Diskanla Indramayu",
-                            style: GoogleFonts.poppins(color: Colors.white.withOpacity(0.9), fontSize: 13, letterSpacing: 0.5),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            "AQUARA",
-                            style: GoogleFonts.poppins(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800),
-                          ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
                   GestureDetector(
                     onTap: () {
                       if (_isLoggedIn) {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const NotifikasiScreen()));
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const NotifikasiScreen(),
+                          ),
+                        );
                       } else {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const LoginScreen(),
+                          ),
+                        );
                       }
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white.withOpacity(0.2)),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                        ),
                       ),
                       child: Row(
                         children: [
-                          Icon(_isLoggedIn ? Icons.notifications_outlined : Icons.login, color: Colors.white, size: 20),
+                          Icon(
+                            _isLoggedIn
+                                ? Icons.notifications_outlined
+                                : Icons.login,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                           if (!_isLoggedIn) ...[
                             const SizedBox(width: 6),
-                            Text("Login", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12)),
-                          ]
+                            Text(
+                              "Login",
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 24),
 
             Column(
@@ -211,8 +343,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Text(
-                    "Mendukung Pembudidaya", 
-                    style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)
+                    "Mendukung Pembudidaya",
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -233,21 +369,47 @@ class _HomeScreenState extends State<HomeScreen> {
                           return GestureDetector(
                             onTap: () {
                               if (index == 0) {
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => const AnalysisScreen()));
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const AnalysisScreen(),
+                                  ),
+                                );
                               } else if (index == 1) {
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => const PasarScreen()));
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const PasarScreen(),
+                                  ),
+                                );
                               } else if (index == 2) {
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => const ForumScreen()));
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const ForumScreen(),
+                                  ),
+                                );
                               } else if (index == 3) {
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => const ConsultationScreen()));
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const ConsultationScreen(),
+                                  ),
+                                );
                               }
                             },
                             child: Container(
-                              margin: const EdgeInsets.only(right: 12), 
+                              margin: const EdgeInsets.only(right: 12),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(20),
                                 boxShadow: [
-                                  BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4))
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 4),
+                                  ),
                                 ],
                                 image: DecorationImage(
                                   image: AssetImage(_bannerImages[index]),
@@ -260,14 +422,25 @@ class _HomeScreenState extends State<HomeScreen> {
                                   gradient: LinearGradient(
                                     begin: Alignment.bottomCenter,
                                     end: Alignment.topCenter,
-                                    colors: [Colors.black.withOpacity(0.6), Colors.transparent],
+                                    colors: [
+                                      Colors.black.withOpacity(0.6),
+                                      Colors.transparent,
+                                    ],
                                   ),
                                 ),
-                                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 40),
+                                padding: const EdgeInsets.only(
+                                  left: 16,
+                                  right: 16,
+                                  bottom: 40,
+                                ),
                                 alignment: Alignment.bottomLeft,
                                 child: Text(
-                                      _bannerTitles[index],
-                                      style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                  _bannerTitles[index],
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
                             ),
@@ -279,9 +452,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     Positioned(
                       bottom: 12,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.4), 
+                          color: Colors.black.withOpacity(0.4),
                           borderRadius: BorderRadius.circular(15),
                         ),
                         child: Row(
@@ -289,12 +465,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: List.generate(
                             _bannerImages.length,
                             (index) => AnimatedContainer(
-                              duration: const Duration(milliseconds: 300), 
+                              duration: const Duration(milliseconds: 300),
                               margin: const EdgeInsets.symmetric(horizontal: 3),
                               height: 6,
-                              width: _currentBannerIndex == index ? 20 : 6, 
+                              width: _currentBannerIndex == index ? 20 : 6,
                               decoration: BoxDecoration(
-                                color: _currentBannerIndex == index ? Colors.white : Colors.white.withOpacity(0.5),
+                                color: _currentBannerIndex == index
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.5),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                             ),
@@ -308,7 +486,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
 
             const SizedBox(height: 24),
-            
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
@@ -316,23 +494,69 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     "Layanan Utama",
-                    style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  GridView.count(
+                  GridView(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 15,
-                    mainAxisSpacing: 18,
-                    childAspectRatio: 0.80, 
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 15,
+                      mainAxisSpacing: 18,
+                      childAspectRatio: 0.80,
+                      mainAxisExtent:
+                          MediaQuery.textScalerOf(context).scale(1) > 1
+                          ? 80 + 66 * MediaQuery.textScalerOf(context).scale(1)
+                          : null,
+                    ),
                     children: [
-                      _buildMenuIcon(context, "Analisa Usaha", 'assets/analisa usaha.png', indramayuGreen, indramayuGreen.withOpacity(0.1)),
-                      _buildMenuIcon(context, "Harga Pasar", 'assets/harga pasar.png', Colors.orange, Colors.orange.withOpacity(0.1)),
-                      _buildMenuIcon(context, "Katalog Ikan", 'assets/katalog ikan.png', Colors.blueAccent, Colors.blueAccent.withOpacity(0.1)),
-                      _buildMenuIcon(context, "Forum", 'assets/forum.png', Colors.purple, Colors.purple.withOpacity(0.1)),
-                      _buildMenuIcon(context, "Konsultasi", 'assets/konsultasi.png', Colors.teal, Colors.teal.withOpacity(0.1)),
-                      _buildMenuIcon(context, "Info Dinas", 'assets/dinas.png', indramayuBlue, indramayuBlue.withOpacity(0.1)),
+                      _buildMenuIcon(
+                        context,
+                        "Analisa Usaha",
+                        'assets/analisa usaha.png',
+                        indramayuGreen,
+                        indramayuGreen.withOpacity(0.1),
+                      ),
+                      _buildMenuIcon(
+                        context,
+                        "Harga Pasar",
+                        'assets/harga pasar.png',
+                        Colors.orange,
+                        Colors.orange.withOpacity(0.1),
+                      ),
+                      _buildMenuIcon(
+                        context,
+                        "Katalog Ikan",
+                        'assets/katalog ikan.png',
+                        Colors.blueAccent,
+                        Colors.blueAccent.withOpacity(0.1),
+                      ),
+                      _buildMenuIcon(
+                        context,
+                        "Forum",
+                        'assets/forum.png',
+                        Colors.purple,
+                        Colors.purple.withOpacity(0.1),
+                      ),
+                      _buildMenuIcon(
+                        context,
+                        "Konsultasi",
+                        'assets/konsultasi.png',
+                        Colors.teal,
+                        Colors.teal.withOpacity(0.1),
+                      ),
+                      _buildMenuIcon(
+                        context,
+                        "Info Dinas",
+                        'assets/dinas.png',
+                        indramayuBlue,
+                        indramayuBlue.withOpacity(0.1),
+                      ),
                     ],
                   ),
                 ],
@@ -340,31 +564,47 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
 
             const SizedBox(height: 24),
-            
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                spacing: 16,
+                runSpacing: 8,
                 children: [
                   Text(
                     "Analisa Komoditas",
-                    style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
                   GestureDetector(
                     onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const SemuaKomoditasScreen()));
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SemuaKomoditasScreen(),
+                        ),
+                      );
                     },
                     child: Text(
                       "Lihat Semua",
-                      style: GoogleFonts.poppins(fontSize: 12, color: indramayuBlue, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: indramayuBlue,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            FutureBuilder<List<dynamic>>(
+            ReferenceListBuilder(
               future: _fishList,
+              retry: () => _loadReference(_apiService.fetchFishTypes),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(
@@ -383,29 +623,44 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Column(
                       children: [
-                        const Icon(Icons.error_outline, color: Colors.red, size: 30),
+                        const Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 30,
+                        ),
                         const SizedBox(height: 10),
                         Text(
                           "Gagal terhubung ke Server.",
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(fontSize: 12, color: Colors.red),
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.red,
+                          ),
                         ),
                       ],
                     ),
                   );
                 } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(child: Text("Belum ada data ikan.", style: GoogleFonts.poppins()));
+                  return Center(
+                    child: Text(
+                      "Belum ada data ikan.",
+                      style: GoogleFonts.poppins(),
+                    ),
+                  );
                 }
 
                 return ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: snapshot.data!.length > 2 ? 2 : snapshot.data!.length,
+                  itemCount: snapshot.data!.length > 2
+                      ? 2
+                      : snapshot.data!.length,
                   itemBuilder: (context, index) {
                     var ikan = snapshot.data![index];
                     String nama = ikan['name'] ?? 'Tanpa Nama';
                     String fcr = ikan['fcr_ratio']?.toString() ?? '-';
-                    String panen = ikan['harvest_duration_days']?.toString() ?? '-';
+                    String panen =
+                        ikan['harvest_duration_days']?.toString() ?? '-';
                     var harga = ikan['market_price_per_kg'];
                     String? imageUrl = ikan['image_url'];
 
@@ -415,10 +670,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => AnalysisScreen(
-                              autoFishName: nama,            
-                              autoPrice: harga.toString(),  
-                              autoFcr: fcr,                
-                              autoPeriod: panen,         
+                              autoFishName: nama,
+                              autoPrice: harga.toString(),
+                              autoFcr: fcr,
+                              autoPeriod: panen,
                             ),
                           ),
                         );
@@ -442,11 +697,16 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: GestureDetector(
                 onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const BeritaScreen()));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const BeritaScreen(),
+                    ),
+                  );
                 },
                 child: Container(
-                  height: 130,
-                  width: double.infinity, 
+                  constraints: const BoxConstraints(minHeight: 130),
+                  width: double.infinity,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
                     gradient: LinearGradient(
@@ -455,7 +715,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       colors: [const Color(0xFF0079C3), indramayuBlue],
                     ),
                     boxShadow: [
-                      BoxShadow(color: indramayuBlue.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))
+                      BoxShadow(
+                        color: indramayuBlue.withOpacity(0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
                     ],
                   ),
                   child: Stack(
@@ -463,27 +727,41 @@ class _HomeScreenState extends State<HomeScreen> {
                       Positioned(
                         right: -20,
                         top: -20,
-                        child: CircleAvatar(radius: 60, backgroundColor: Colors.white.withOpacity(0.1)),
+                        child: CircleAvatar(
+                          radius: 60,
+                          backgroundColor: Colors.white.withOpacity(0.1),
+                        ),
                       ),
                       Positioned(
                         right: 40,
                         bottom: -30,
-                        child: CircleAvatar(radius: 40, backgroundColor: Colors.white.withOpacity(0.1)),
+                        child: CircleAvatar(
+                          radius: 40,
+                          backgroundColor: Colors.white.withOpacity(0.1),
+                        ),
                       ),
-                    
+
                       Padding(
                         padding: const EdgeInsets.all(20),
                         child: Row(
                           children: [
                             Container(
                               padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(15)),
-                              child: const Icon(Icons.campaign_outlined, color: Colors.white, size: 32),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              child: const Icon(
+                                Icons.campaign_outlined,
+                                color: Colors.white,
+                                size: 32,
+                              ),
                             ),
                             const SizedBox(width: 16),
-                            
+
                             Expanded(
                               child: Column(
+                                mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -491,18 +769,29 @@ class _HomeScreenState extends State<HomeScreen> {
                                     "Info Diskanla & Umum Terkini",
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.poppins(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     "Info penyuluhan & berita perikanan",
-                                    style: GoogleFonts.poppins(color: Colors.white.withOpacity(0.8), fontSize: 11),
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white.withOpacity(0.8),
+                                      fontSize: 11,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                            
-                            const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+
+                            const Icon(
+                              Icons.arrow_forward_ios,
+                              color: Colors.white,
+                              size: 16,
+                            ),
                           ],
                         ),
                       ),
@@ -524,10 +813,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final indramayuGreen = const Color(0xFF8CC63F);
 
     final List<Widget> pages = [
-      _buildBeranda(indramayuBlue, indramayuGreen),      
-      const BeritaScreen(),                               
+      _buildBeranda(indramayuBlue, indramayuGreen),
+      const BeritaScreen(),
       const PasarScreen(),
-      _isLoggedIn ? const ProfilScreen() : const LoginScreen(),
+      _isLoggedIn ? ProfilScreen(api: _apiService) : const LoginScreen(),
     ];
 
     return Scaffold(
@@ -548,28 +837,58 @@ class _HomeScreenState extends State<HomeScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Beranda"),
           BottomNavigationBarItem(icon: Icon(Icons.newspaper), label: "Berita"),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_bag_outlined), label: "Pasar"),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Profil"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.shopping_bag_outlined),
+            label: "Pasar",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            label: "Profil",
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMenuIcon(BuildContext context, String title, String imagePath, Color shadowColor, Color bgColor) {
+  Widget _buildMenuIcon(
+    BuildContext context,
+    String title,
+    String imagePath,
+    Color shadowColor,
+    Color bgColor,
+  ) {
     return InkWell(
       onTap: () {
         if (title == "Analisa Usaha") {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const AnalysisScreen()));
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AnalysisScreen()),
+          );
         } else if (title == "Katalog Ikan") {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const CatalogScreen()));
-        } else if (title == "Harga Pasar") { 
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const MarketPriceScreen()));
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CatalogScreen()),
+          );
+        } else if (title == "Harga Pasar") {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MarketPriceScreen()),
+          );
         } else if (title == "Info Dinas") {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const InfoDinasScreen()));
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const InfoDinasScreen()),
+          );
         } else if (title == "Forum") {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const ForumScreen()));
-        } else if (title == "Konsultasi") { 
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const ConsultationScreen()));
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ForumScreen()),
+          );
+        } else if (title == "Konsultasi") {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ConsultationScreen()),
+          );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Fitur $title sedang dikembangkan!")),
@@ -581,7 +900,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             height: 64,
             width: 64,
-            padding: const EdgeInsets.all(12), 
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -589,19 +908,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 colors: [bgColor, bgColor.withOpacity(0.3)],
               ),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white, width: 2), 
+              border: Border.all(color: Colors.white, width: 2),
               boxShadow: [
                 BoxShadow(
                   color: shadowColor.withOpacity(0.15),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
-                )
+                ),
               ],
             ),
-            child: Image.asset(
-              imagePath,
-              fit: BoxFit.contain,
-            ),
+            child: Image.asset(imagePath, fit: BoxFit.contain),
           ),
           const SizedBox(height: 8),
           Text(
@@ -609,7 +925,7 @@ class _HomeScreenState extends State<HomeScreen> {
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
               fontSize: 11,
-              fontWeight: FontWeight.w600, 
+              fontWeight: FontWeight.w600,
               color: Colors.black87,
             ),
           ),
@@ -618,7 +934,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCommodityCard(String name, String specs, String price, Color accentColor, String? imageUrl) {
+  Widget _buildCommodityCard(
+    String name,
+    String specs,
+    String price,
+    Color accentColor,
+    String? imageUrl,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12, left: 24, right: 24),
       padding: const EdgeInsets.all(16),
@@ -658,7 +980,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             value: loadingProgress.expectedTotalBytes != null
-                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
                                 : null,
                           ),
                         );

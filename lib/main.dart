@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'services/session_service.dart';
+import 'widgets/session_boundary.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/splash_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -10,15 +13,19 @@ final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   debugPrint("Background message: ${message.messageId}");
-  
+
   if (message.notification != null) {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'aquara_channel_id', 'Notifikasi AQUARA',
-      importance: Importance.max,
-      priority: Priority.high,
-      color: Color(0xFF009FE3),
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'aquara_channel_id',
+          'Notifikasi AQUARA',
+          importance: Importance.max,
+          priority: Priority.high,
+          color: Color(0xFF009FE3),
+        );
+    const NotificationDetails details = NotificationDetails(
+      android: androidDetails,
     );
-    const NotificationDetails details = NotificationDetails(android: androidDetails);
     await flutterLocalNotificationsPlugin.show(
       id: 0,
       title: message.notification!.title ?? 'AQUARA',
@@ -28,28 +35,34 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   try {
     await Firebase.initializeApp();
-    
+
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     await FirebaseMessaging.instance.requestPermission(
-      alert: true, badge: true, sound: true,
+      alert: true,
+      badge: true,
+      sound: true,
     );
 
-    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-    await flutterLocalNotificationsPlugin.initialize(settings: initializationSettings);
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
+    await flutterLocalNotificationsPlugin.initialize(
+      settings: initializationSettings,
+    );
 
     await FirebaseMessaging.instance.subscribeToTopic("all_users");
     await FirebaseMessaging.instance.subscribeToTopic("info_pasar");
     debugPrint("Berhasil berlangganan ke Toa Masjid 'all_users'");
-
   } catch (e) {
     debugPrint("Waduh, Firebase gagal menyala Komandan: $e");
   }
@@ -65,31 +78,62 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription<int>? _sessionSubscription;
+  StreamSubscription<RemoteMessage>? _messageSubscription;
+  int _revision = SessionService.instance.revision;
+  bool _hadSession = SessionService.instance.hasSession;
+
   @override
   void initState() {
     super.initState();
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    _sessionSubscription = SessionService.instance.changes.listen((revision) {
+      if (!mounted) return;
+      final session = SessionService.instance;
+      if (_hadSession && revision != _revision) {
+        final navigator = _navigatorKey.currentState;
+        if (navigator != null) SessionNavigation.leaveNavigator(navigator);
+      }
+      _revision = revision;
+      _hadSession = session.hasSession;
+    });
+    _messageSubscription = FirebaseMessaging.onMessage.listen((
+      RemoteMessage message,
+    ) {
       debugPrint("Ada Sinyal Masuk Saat Aplikasi Dibuka!");
-      
+
       if (message.notification != null) {
-        _showLocalNotification(message.notification!.title ?? 'AQUARA', message.notification!.body ?? '');
+        _showLocalNotification(
+          message.notification!.title ?? 'AQUARA',
+          message.notification!.body ?? '',
+        );
       }
     });
   }
 
+  @override
+  void dispose() {
+    _sessionSubscription?.cancel();
+    _messageSubscription?.cancel();
+    super.dispose();
+  }
+
   Future<void> _showLocalNotification(String title, String body) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
-      'aquara_channel_id', 'Notifikasi AQUARA',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-      color: Color(0xFF009FE3),
-      icon: '@mipmap/ic_launcher',
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+          'aquara_channel_id',
+          'Notifikasi AQUARA',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+          color: Color(0xFF009FE3),
+          icon: '@mipmap/ic_launcher',
+        );
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
     );
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
-    
-        await flutterLocalNotificationsPlugin.show(
+
+    await flutterLocalNotificationsPlugin.show(
       id: 0,
       title: title,
       body: body,
@@ -103,32 +147,33 @@ class _MyAppState extends State<MyApp> {
       valueListenable: themeNotifier,
       builder: (_, ThemeMode currentMode, __) {
         return MaterialApp(
+          navigatorKey: _navigatorKey,
           debugShowCheckedModeBanner: false,
           title: 'AQUARA',
-          themeMode: currentMode, 
-          
+          themeMode: currentMode,
+
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF009FE3), 
-              secondary: const Color(0xFF8CC63F), 
-              brightness: Brightness.light, 
+              seedColor: const Color(0xFF009FE3),
+              secondary: const Color(0xFF8CC63F),
+              brightness: Brightness.light,
             ),
             useMaterial3: true,
-            textTheme: GoogleFonts.poppinsTextTheme(), 
+            textTheme: GoogleFonts.poppinsTextTheme(),
           ),
 
           darkTheme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF009FE3), 
+              seedColor: const Color(0xFF009FE3),
               secondary: const Color(0xFF8CC63F),
-              brightness: Brightness.dark, 
+              brightness: Brightness.dark,
             ),
             useMaterial3: true,
             textTheme: GoogleFonts.poppinsTextTheme(
               ThemeData(brightness: Brightness.dark).textTheme,
             ),
           ),
-          
+
           home: const SplashScreen(),
         );
       },

@@ -1,238 +1,324 @@
+import '../widgets/session_boundary.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/api_service.dart'; 
+import '../services/api_result.dart';
+import '../services/api_service.dart';
+import '../services/auth_cooldown.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
 
-class OtpScreen extends StatefulWidget {
-  final String phone; 
-  final bool isRegistration; 
-  final bool isResetPassword;
-  final String newPassword; 
+enum OtpPurpose { register, login, reset, contact, delete }
 
+class OtpScreen extends StatelessWidget {
   const OtpScreen({
-    super.key, 
-    required this.phone, 
-    this.isRegistration = false,
-    this.isResetPassword = false,
-    this.newPassword = "",
-  }); 
-
+    super.key,
+    required this.identifier,
+    required this.purpose,
+    required this.method,
+    this.newPassword,
+    this.api,
+    this.onAuthenticated,
+  });
+  final String identifier;
+  final OtpPurpose purpose;
+  final String method;
+  final String? newPassword;
+  final ApiService? api;
+  final VoidCallback? onAuthenticated;
   @override
-  State<OtpScreen> createState() => _OtpScreenState();
+  Widget build(BuildContext context) {
+    Widget content() => _OtpScreenContent(
+      identifier: identifier,
+      purpose: purpose,
+      method: method,
+      newPassword: newPassword,
+      api: api,
+      onAuthenticated: onAuthenticated,
+    );
+    if (purpose != OtpPurpose.contact && purpose != OtpPurpose.delete) {
+      return content();
+    }
+    return SessionBoundary(api: api, builder: (_) => content());
+  }
 }
 
-class _OtpScreenState extends State<OtpScreen> {
-  final List<TextEditingController> _controllers = List.generate(6, (index) => TextEditingController());
-  final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
-  
-  bool _isLoading = false; 
-  bool _isResending = false; 
+class _OtpScreenContent extends StatefulWidget {
+  const _OtpScreenContent({
+    required this.identifier,
+    required this.purpose,
+    required this.method,
+    this.newPassword,
+    this.api,
+    this.onAuthenticated,
+  });
+  final String identifier;
+  final OtpPurpose purpose;
+  final String method;
+  final String? newPassword;
+  final ApiService? api;
+  final VoidCallback? onAuthenticated;
+  @override
+  State<_OtpScreenContent> createState() => _OtpScreenState();
+}
+
+class _OtpScreenState extends State<_OtpScreenContent> {
+  final _form = GlobalKey<FormState>();
+  final _otp = TextEditingController();
+  late final _identifier = TextEditingController(text: widget.identifier);
+  late final ApiService _api = widget.api ?? ApiService();
+  late final int _ownerRevision = _api.session.revision;
+  bool get _private =>
+      widget.purpose == OtpPurpose.contact ||
+      widget.purpose == OtpPurpose.delete;
+  bool get _current => !_private || _ownerRevision == _api.session.revision;
+  late String _method = widget.method;
+  bool _busy = false;
+  bool _sent = false;
+  bool _needsNewCode = false;
+  DateTime? _expires;
+  String? _message;
+  Timer? _timer;
+  int get _wait => AuthCooldown.instance.remaining('otp');
+  bool get _expired => _expires != null && !DateTime.now().isBefore(_expires!);
+  bool get _canVerify => _sent && !_expired && !_needsNewCode && !_busy;
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   void dispose() {
-    for (var controller in _controllers) { controller.dispose(); }
-    for (var node in _focusNodes) { node.dispose(); }
+    _timer?.cancel();
+    _otp.dispose();
+    _identifier.dispose();
     super.dispose();
   }
 
-  Future<void> _verifyOtp() async {
-    String otpCode = _controllers.map((c) => c.text).join();
-    if (otpCode.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Masukkan 6 digit OTP!'), backgroundColor: Colors.red));
+  Future<void> _send() async {
+    if (_busy || _wait > 0) return;
+    final id = _identifier.text.trim();
+    if (widget.purpose == OtpPurpose.login &&
+        !RegExp(r'^\+?[0-9]{10,15}$').hasMatch(id)) {
+      setState(
+        () => _message = 'Nomor WA wajib 10–15 digit, awalan + opsional.',
+      );
       return;
     }
-
-    setState(() => _isLoading = true);
-
-    Map<String, dynamic> result;
-    if (widget.isResetPassword) {
-      result = await ApiService().resetPasswordWithOtp(widget.phone, otpCode, widget.newPassword);
-    } else if (widget.isRegistration) {
-      result = await ApiService().verifyRegistrationOtp(widget.phone, otpCode);
-    } else {
-      result = await ApiService().verifyOtpWa(widget.phone, otpCode);
-    }
-
-    setState(() => _isLoading = false);
-
-    if (!context.mounted) return;
-
-    if (!mounted) return;
-    if (result['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.green));
-      
-      if (widget.isResetPassword) {
-        Navigator.pushAndRemoveUntil(
-          context, 
-          MaterialPageRoute(builder: (context) => const LoginScreen()), 
-          (route) => false
-        );
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final result = await switch (widget.purpose) {
+        OtpPurpose.register => _api.requestRegistrationOtp(id, _method),
+        OtpPurpose.login => _api.sendOtpWa(id),
+        OtpPurpose.reset => _api.requestResetOtp(id, _method),
+        OtpPurpose.contact => _api.requestUbahKontakOtp(id, _method),
+        OtpPurpose.delete => _api.requestHapusAkunOtp(_method),
+      };
+      if (!mounted || !_current) return;
+      if (result.isSuccess) {
+        _sent = true;
+        _needsNewCode = false;
+        _otp.clear();
+        _expires = DateTime.now().add(const Duration(minutes: 5));
+        AuthCooldown.instance.wait('otp', const Duration(seconds: 60));
+        _message = 'Kode dikirim. Berlaku 5 menit. Gunakan kode terbaru.';
       } else {
-        Navigator.pushAndRemoveUntil(
-          context, 
-          MaterialPageRoute(builder: (context) => const HomeScreen()), 
-          (route) => false
-        );
+        _error(result);
       }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.red));
-      for (var c in _controllers) { c.clear(); }
-      _focusNodes[0].requestFocus(); 
+    } catch (_) {
+      if (mounted && _current) {
+        _message = 'Tidak dapat mengirim OTP. Silakan coba kembali.';
+      }
+    } finally {
+      if (mounted && _current) setState(() => _busy = false);
+    }
+  }
+
+  void _error(ApiResult<Object?> result) {
+    if (result.failure?.kind == ApiErrorKind.unauthenticated) {
+      if (widget.purpose == OtpPurpose.contact ||
+          widget.purpose == OtpPurpose.delete) {
+        return;
+      }
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LoginScreen(api: _api)),
+        (_) => false,
+      );
+      return;
+    }
+    _message = result.statusCode == 401
+        ? 'Kode OTP salah, kedaluwarsa, atau sudah digunakan.'
+        : result.failure?.message ?? 'Verifikasi gagal.';
+    if (result.statusCode == 429) {
+      AuthCooldown.instance.record(result, 'otp');
+      _needsNewCode = true;
+      _message =
+          '${_message!} Setelah waktu tunggu, minta kode baru sebelum verifikasi.';
+    }
+  }
+
+  Future<void> _verify() async {
+    if (!_canVerify || !_form.currentState!.validate()) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final id = _identifier.text.trim();
+      final result = await switch (widget.purpose) {
+        OtpPurpose.register => _api.verifyRegistrationOtp(id, _otp.text),
+        OtpPurpose.login => _api.verifyOtpWa(id, _otp.text),
+        OtpPurpose.reset => _api.resetPasswordWithOtp(
+          id,
+          _otp.text,
+          widget.newPassword ?? '',
+        ),
+        OtpPurpose.contact => _api.ubahKontak(_method, id, _otp.text),
+        OtpPurpose.delete => _api.hapusAkun(_otp.text),
+      };
+      if (!mounted || !_current) return;
+      if (result.isSuccess) {
+        _otp.clear();
+        if (widget.purpose == OtpPurpose.register ||
+            widget.purpose == OtpPurpose.login) {
+          if (widget.onAuthenticated != null) {
+            widget.onAuthenticated!();
+          } else {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+              (_) => false,
+            );
+          }
+        } else if (widget.purpose == OtpPurpose.reset) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => LoginScreen(api: _api)),
+            (_) => false,
+          );
+        }
+      } else {
+        _error(result);
+      }
+    } catch (_) {
+      if (mounted && _current) {
+        _message = 'Tidak dapat memverifikasi OTP. Silakan coba kembali.';
+      }
+    } finally {
+      if (mounted && _current) setState(() => _busy = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    String targetText = widget.phone.contains('@') ? "Email" : "WhatsApp";
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_busy,
+    child: Scaffold(
+      appBar: AppBar(title: const Text('Verifikasi OTP')),
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(height: 40),
-                const Icon(Icons.security_rounded, size: 80, color: Color(0xFF009FE3)),
-                const SizedBox(height: 24),
-                const Text(
-                  "Verifikasi Kode OTP",
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  "Kami telah mengirimkan 6 digit kode OTP ke $targetText\n${widget.phone}.\nSilakan masukkan di bawah ini.",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-                const SizedBox(height: 40),
-                
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(6, (index) => _buildOtpBox(index)),
-                ),
-                
-                const SizedBox(height: 40),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _verifyOtp,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF009FE3),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text(
-                            "Verifikasi",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Form(
+                key: _form,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text("Belum menerima kode? ", style: TextStyle(color: Colors.grey)),
-                    GestureDetector(
-                      onTap: _isResending ? null : () async {
-                        setState(() => _isResending = true);
-
-                        Map<String, dynamic> response; 
-                        String method = widget.phone.contains('@') ? 'email' : 'wa';
-                        
-                        if (widget.isResetPassword) {
-                          response = await ApiService().requestResetOtp(widget.phone, method);
-                        } else if (widget.isRegistration) {
-                          response = await ApiService().requestRegistrationOtp(widget.phone, method);
-                        } else {
-                          response = await ApiService().sendOtpWa(widget.phone);
-                        }
-                        
-                        setState(() => _isResending = false);
-
-                        if (!context.mounted) return;
-                        
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(response['message']),
-                            backgroundColor: response['success'] ? Colors.green : Colors.red,
-                          )
-                        );
-                      },
-                      child: _isResending 
-                        ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text(
-                            "Kirim Ulang",
-                            style: TextStyle(color: Color(0xFF009FE3), fontWeight: FontWeight.bold),
+                    Text(
+                      widget.purpose == OtpPurpose.register
+                          ? 'Akun belum aktif. Kirim kode untuk menyelesaikan verifikasi registrasi.'
+                          : widget.purpose == OtpPurpose.delete
+                          ? 'Konfirmasi penghapusan akun dengan OTP.'
+                          : 'Kirim kode verifikasi melalui kanal yang dipilih.',
+                    ),
+                    if (widget.purpose != OtpPurpose.delete)
+                      TextFormField(
+                        controller: _identifier,
+                        enabled:
+                            widget.purpose == OtpPurpose.login &&
+                            !_sent &&
+                            !_busy,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(
+                          labelText: 'Email / nomor tujuan atau akun',
+                        ),
+                      ),
+                    if (widget.purpose == OtpPurpose.register ||
+                        widget.purpose == OtpPurpose.reset ||
+                        widget.purpose == OtpPurpose.delete)
+                      DropdownButtonFormField<String>(
+                        initialValue: _method,
+                        decoration: const InputDecoration(
+                          labelText: 'Kanal OTP',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'wa',
+                            child: Text('WhatsApp'),
                           ),
-                    )
+                          DropdownMenuItem(
+                            value: 'email',
+                            child: Text('Email'),
+                          ),
+                        ],
+                        onChanged: _busy || _sent
+                            ? null
+                            : (v) => setState(() => _method = v!),
+                      ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _otp,
+                      enabled: _sent && !_busy,
+                      keyboardType: TextInputType.number,
+                      autofillHints: const [AutofillHints.oneTimeCode],
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(6),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'Kode OTP 6 digit',
+                      ),
+                      validator: (v) => RegExp(r'^[0-9]{6}$').hasMatch(v ?? '')
+                          ? null
+                          : 'OTP wajib tepat 6 digit.',
+                    ),
+                    if (_message != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(_message!),
+                      ),
+                    if (_expired)
+                      const Text('Kode sudah kedaluwarsa. Minta kode baru.'),
+                    if (_wait > 0)
+                      Text('Kirim ulang tersedia dalam $_wait detik.'),
+                    const Text(
+                      'Kode baru menggantikan kode sebelumnya, termasuk kode untuk tujuan lain. Batas pengiriman dan percobaan ditentukan server.',
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: _canVerify ? _verify : null,
+                      child: const Text('Verifikasi'),
+                    ),
+                    OutlinedButton(
+                      onPressed: _busy || _wait > 0 ? null : _send,
+                      child: Text(_sent ? 'Kirim ulang OTP' : 'Kirim OTP'),
+                    ),
+                    if (_busy) const Center(child: CircularProgressIndicator()),
                   ],
                 ),
-                const SizedBox(height: 40),
-              ],
+              ),
             ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildOtpBox(int index) {
-    return Flexible(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4.0), 
-        child: SizedBox(
-          height: 55, 
-          child: TextField(
-            controller: _controllers[index],
-            focusNode: _focusNodes[index],
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.center,
-            maxLength: 1, 
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly], 
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            decoration: InputDecoration(
-              counterText: "", 
-              contentPadding: EdgeInsets.zero,
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: Colors.grey.shade300, width: 2),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFF009FE3), width: 2),
-              ),
-            ),
-            onChanged: (value) {
-              if (value.isNotEmpty) {
-                if (index < 5) {
-                  _focusNodes[index + 1].requestFocus();
-                } else {
-                  _focusNodes[index].unfocus();
-                  _verifyOtp(); 
-                }
-              } else if (value.isEmpty && index > 0) {
-                _focusNodes[index - 1].requestFocus();
-              }
-            },
-          ),
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }
