@@ -142,6 +142,7 @@ jobs:
           from pathlib import Path
           import re
           import time
+          import urllib.error
           import urllib.request
           import uuid
 
@@ -149,23 +150,63 @@ jobs:
               def redirect_request(self, req, fp, code, msg, headers, newurl):
                   return None
 
+          class TelegramFailure(Exception):
+              pass
+
+          def api_error_hint(payload):
+              # Match known errors; never print a response, URL, chat ID or token.
+              try:
+                  description = json.loads(payload).get('description', '')
+                  if not isinstance(description, str):
+                      return 'Detail respons disembunyikan.'
+                  description = description.lower()
+                  hints = (
+                      ('unauthorized', 'Token ditolak; periksa TELEGRAM_BOT_TOKEN di GitHub Secrets.'),
+                      ('chat not found', 'Chat tidak ditemukan atau tidak dapat diakses bot; periksa TELEGRAM_CHAT_ID.'),
+                      ('bot was blocked', 'Bot diblokir oleh penerima.'),
+                      ('bot was kicked', 'Bot sudah dikeluarkan dari chat tujuan.'),
+                      ('bot is not a member', 'Bot belum menjadi anggota chat tujuan.'),
+                      ('chat_send_documents_forbidden', 'Bot tidak diizinkan mengirim dokumen ke chat tujuan.'),
+                      ('not enough rights to send documents', 'Bot tidak diizinkan mengirim dokumen ke chat tujuan.'),
+                      ('not enough rights', 'Hak bot di chat tujuan tidak mencukupi.'),
+                      ('chat_write_forbidden', 'Bot tidak diizinkan menulis ke chat tujuan.'),
+                      ('file is too big', 'Ukuran dokumen ditolak Telegram.'),
+                      ('too many requests', 'Batas permintaan Telegram tercapai; tidak ada retry otomatis.'),
+                      ('not found', 'Endpoint atau token tidak ditemukan Telegram.'),
+                  )
+                  for needle, hint in hints:
+                      if needle in description:
+                          return hint
+              except Exception:
+                  pass
+              return 'Detail respons disembunyikan.'
+
+          stage = 'membaca secrets Telegram'
           try:
-              token = os.environ['TELEGRAM_BOT_TOKEN']
-              chat = os.environ['TELEGRAM_CHAT_ID']
+              token = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
+              chat = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
+              stage = 'validasi TELEGRAM_BOT_TOKEN'
               if not re.fullmatch(r'[0-9]+:[A-Za-z0-9_-]+', token):
-                  raise ValueError()
+                  raise TelegramFailure('Secret kosong atau format token tidak sesuai; nilai disembunyikan.')
+              stage = 'validasi TELEGRAM_CHAT_ID'
               if not re.fullmatch(r'-?[0-9]+|@[A-Za-z0-9_]+', chat):
-                  raise ValueError()
+                  raise TelegramFailure('Secret kosong atau format chat ID tidak sesuai; nilai disembunyikan.')
+              stage = 'validasi file APK'
               folder = Path('build/app/outputs/flutter-apk')
               apks = [folder / ('app-' + abi + '-release.apk')
                       for abi in ('armeabi-v7a', 'arm64-v8a', 'x86_64')]
               # Validate all outputs first; no broad glob can upload signing material.
-              if any(p.is_symlink() or not p.is_file() or not 0 < p.stat().st_size <= 50_000_000
-                     for p in apks):
-                  raise ValueError()
+              for apk in apks:
+                  if apk.is_symlink() or not apk.is_file():
+                      raise TelegramFailure('File APK yang diharapkan tidak tersedia: ' + apk.name)
+                  size = apk.stat().st_size
+                  if not 0 < size <= 50_000_000:
+                      raise TelegramFailure('Ukuran APK di luar batas 1-50.000.000 byte: ' + apk.name)
+                  print('APK tervalidasi: ' + apk.name + '; ukuran=' + str(size) + ' byte')
               opener = urllib.request.build_opener(NoRedirect())
               message = os.environ.get('COMMIT_MESSAGE') or 'Build manual (workflow_dispatch)'
               for apk in apks:
+                  stage = 'pengiriman ' + apk.name
                   caption = 'AQUARA Mobile Build\nFile: ' + apk.name + '\nCommit: ' + message
                   # Conservative UTF-16 limit, also safe for emoji; no Markdown interpretation.
                   caption = caption.encode('utf-16-le')[:1800].decode('utf-16-le', errors='ignore')
@@ -187,14 +228,24 @@ jobs:
                   with opener.open(request, timeout=180) as response:
                       payload = response.read(1024 * 1024 + 1)
                       if response.status != 200 or len(payload) > 1024 * 1024:
-                          raise ValueError()
+                          raise TelegramFailure('Status atau ukuran respons Telegram tidak sesuai.')
                       result = json.loads(payload)
                       if result.get('ok') is not True or not isinstance(result.get('result'), dict):
-                          raise ValueError()
+                          raise TelegramFailure(api_error_hint(payload))
                   print('Telegram mengonfirmasi pengiriman: ' + apk.name)
                   time.sleep(2)
+          except urllib.error.HTTPError as error:
+              try:
+                  hint = api_error_hint(error.read(1024 * 1024))
+              except Exception:
+                  hint = 'Detail respons disembunyikan.'
+              raise SystemExit('Tahap gagal: ' + stage + '; HTTP=' + str(error.code) + '; ' + hint) from None
+          except (urllib.error.URLError, TimeoutError):
+              raise SystemExit('Tahap gagal: ' + stage + '; gangguan koneksi atau timeout. Periksa Telegram sebelum retry manual; nilai secrets disembunyikan.') from None
+          except TelegramFailure as error:
+              raise SystemExit('Tahap gagal: ' + stage + '; ' + str(error)) from None
           except Exception:
-              raise SystemExit('Pengiriman APK gagal atau belum terkonfirmasi. Periksa Telegram sebelum retry manual; detail/token disembunyikan.')
+              raise SystemExit('Tahap gagal: ' + stage + '; kesalahan lain, detail/token disembunyikan. Periksa Telegram sebelum retry manual.') from None
           PY
 
       - name: 🧹 Bersihkan material signing CI
