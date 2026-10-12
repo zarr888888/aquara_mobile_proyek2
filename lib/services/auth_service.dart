@@ -32,7 +32,7 @@ class AuthService {
         serverClientId: const String.fromEnvironment(
           'GOOGLE_SERVER_CLIENT_ID',
           defaultValue:
-              '525481370217-qpvpucpii0qbttmrf5knk34a86nqs9ips.apps.googleusercontent.com',
+              '525481370217-qpvpucpi0qbttmrf5knk34a86nqs9ips.apps.googleusercontent.com',
         ),
       ));
     } catch (_) {

@@ -30,39 +30,178 @@ jobs:
       - name: 📦 Install Dependencies
         run: flutter pub get
 
-      - name: 🔐 Menyiapkan google-services.json
+      - name: 🔐 Validasi dan siapkan signing CI
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+          set +x
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
 
-      - name: 🔑 Menyiapkan Keystore
-        run: |
-          echo '${{ secrets.KEYSTORE_BASE64 }}' | base64 --decode > android/app/aquara-release.jks
+          def property_value(value):
+              # Properties.load(InputStream) uses ISO-8859-1 + UTF-16 escapes.
+              # Escape every code unit, including spaces, newlines and backslashes.
+              raw = value.encode('utf-16-be')
+              return ''.join('\\u' + raw[i:i + 2].hex() for i in range(0, len(raw), 2))
 
-      - name: 📝 Membuat key.properties
-        run: |
-          cat > android/key.properties << EOF
-          storePassword=${{ secrets.STORE_PASSWORD }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          storeFile=aquara-release.jks
-          EOF
+          try:
+              names = ('KEYSTORE_BASE64', 'STORE_PASSWORD', 'KEY_PASSWORD',
+                       'KEY_ALIAS', 'GOOGLE_SERVICES_JSON')
+              values = {name: os.environ[name] for name in names}
+              if any(not value.strip() or '\x00' in value for value in values.values()):
+                  raise ValueError()
+              # Whitespace/newlines in a pasted base64 export are allowed, not junk.
+              encoded = ''.join(values['KEYSTORE_BASE64'].split())
+              keystore = base64.b64decode(encoded, validate=True)
+              if not keystore or len(keystore) > 1024 * 1024:
+                  raise ValueError()
+              google = json.loads(values['GOOGLE_SERVICES_JSON'])
+              clients = google['client']
+              package = 'com.aquara.app.aquara_mobile'
+              matching = [c for c in clients if c['client_info'].get(
+                  'android_client_info', {}).get('package_name') == package]
+              if not google['project_info']['project_id'] or not matching:
+                  raise ValueError()
+              if not any(c['client_info'].get('mobilesdk_app_id') and any(
+                  k.get('current_key') for k in c.get('api_key', [])) for c in matching):
+                  raise ValueError()
+              # Never place the keystore in the checkout or a cached/artifact directory.
+              private_dir = Path(os.environ['RUNNER_TEMP']) / 'samudera-signing'
+              private_dir.mkdir(mode=0o700, exist_ok=False)
+              store = private_dir / 'ci-test-signing.jks'
+              store.write_bytes(keystore)
+              props = Path('android/key.properties')
+              fields = {'storePassword': values['STORE_PASSWORD'],
+                        'keyPassword': values['KEY_PASSWORD'],
+                        'keyAlias': values['KEY_ALIAS'], 'storeFile': str(store.resolve())}
+              with props.open('x', encoding='ascii', newline='\n') as output:
+                  output.write(''.join(k + '=' + property_value(v) + '\n'
+                                       for k, v in fields.items()))
+              verifier = private_dir / 'VerifySigning.java'
+              verifier.write_text('''
+          import java.io.*;
+          import java.security.*;
+          import java.security.cert.X509Certificate;
+          import java.util.*;
+          class VerifySigning {
+              public static void main(String[] args) {
+                  try {
+                      Properties p = new Properties();
+                      try (InputStream in = new FileInputStream(args[0])) { p.load(in); }
+                      KeyStore ks = KeyStore.getInstance(new File(p.getProperty("storeFile")),
+                          p.getProperty("storePassword").toCharArray());
+                      String alias = p.getProperty("keyAlias");
+                      if (!ks.isKeyEntry(alias) || !(ks.getKey(alias,
+                          p.getProperty("keyPassword").toCharArray()) instanceof PrivateKey)) {
+                          System.exit(1);
+                      }
+                      X509Certificate cert = (X509Certificate) ks.getCertificate(alias);
+                      cert.checkValidity();
+                  } catch (Exception e) { System.exit(1); }
+              }
+          }
+          ''', encoding='utf-8')
+              result = subprocess.run(['java', str(verifier), str(props)],
+                                      capture_output=True, timeout=60)
+              if result.returncode != 0:
+                  raise ValueError()
+              with Path('android/app/google-services.json').open(
+                      'x', encoding='utf-8', newline='\n') as output:
+                  json.dump(google, output, ensure_ascii=True)
+          except Exception:
+              raise SystemExit('Persiapan signing gagal: periksa set secrets dan konfigurasi Firebase; detail disembunyikan.')
+          print('Konfigurasi CI tervalidasi; nilai secrets tidak ditampilkan.')
+          PY
 
       - name: 🏗️ Build APK Release
         run: flutter build apk --release --split-per-abi
 
       - name: 📤 Kirim APK ke Telegram
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          for apk in build/app/outputs/flutter-apk/app-*-release.apk; do
-            FILENAME=$(basename "$apk")
-            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" \
-              -F "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-              -F "document=@${apk}" \
-              -F "caption=📦 *AQUARA Mobile Build Sukses!* 🚀
+          set +x
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import time
+          import urllib.request
+          import uuid
 
-          📝 *Pesan Commit:* $COMMIT_MSG
-          📂 *File:* \`$FILENAME\`" \
-              -F "parse_mode=Markdown"
-            echo "Berhasil mengirim: $FILENAME"
-            sleep 2
-          done
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          try:
+              token = os.environ['TELEGRAM_BOT_TOKEN']
+              chat = os.environ['TELEGRAM_CHAT_ID']
+              if not re.fullmatch(r'[0-9]+:[A-Za-z0-9_-]+', token):
+                  raise ValueError()
+              if not re.fullmatch(r'-?[0-9]+|@[A-Za-z0-9_]+', chat):
+                  raise ValueError()
+              folder = Path('build/app/outputs/flutter-apk')
+              apks = [folder / ('app-' + abi + '-release.apk')
+                      for abi in ('armeabi-v7a', 'arm64-v8a', 'x86_64')]
+              # Validate all outputs first; no broad glob can upload signing material.
+              if any(p.is_symlink() or not p.is_file() or not 0 < p.stat().st_size <= 50_000_000
+                     for p in apks):
+                  raise ValueError()
+              opener = urllib.request.build_opener(NoRedirect())
+              message = os.environ.get('COMMIT_MESSAGE') or 'Build manual (workflow_dispatch)'
+              for apk in apks:
+                  caption = 'AQUARA Mobile Build\nFile: ' + apk.name + '\nCommit: ' + message
+                  # Conservative UTF-16 limit, also safe for emoji; no Markdown interpretation.
+                  caption = caption.encode('utf-16-le')[:1800].decode('utf-16-le', errors='ignore')
+                  boundary = 'samudera-' + uuid.uuid4().hex
+                  body = bytearray()
+                  for name, value in (('chat_id', chat), ('caption', caption)):
+                      body.extend(('--' + boundary + '\r\nContent-Disposition: form-data; name="'
+                                   + name + '"\r\n\r\n' + value + '\r\n').encode('utf-8'))
+                  body.extend(('--' + boundary + '\r\nContent-Disposition: form-data; '
+                               'name="document"; filename="' + apk.name + '"\r\n'
+                               'Content-Type: application/vnd.android.package-archive\r\n\r\n').encode('ascii'))
+                  body.extend(apk.read_bytes())
+                  body.extend(('\r\n--' + boundary + '--\r\n').encode('ascii'))
+                  request = urllib.request.Request(
+                      'https://api.telegram.org/bot' + token + '/sendDocument',
+                      data=bytes(body), method='POST', headers={
+                          'Content-Type': 'multipart/form-data; boundary=' + boundary})
+                  # No retries: a timeout can mean the document was already delivered.
+                  with opener.open(request, timeout=180) as response:
+                      payload = response.read(1024 * 1024 + 1)
+                      if response.status != 200 or len(payload) > 1024 * 1024:
+                          raise ValueError()
+                      result = json.loads(payload)
+                      if result.get('ok') is not True or not isinstance(result.get('result'), dict):
+                          raise ValueError()
+                  print('Telegram mengonfirmasi pengiriman: ' + apk.name)
+                  time.sleep(2)
+          except Exception:
+              raise SystemExit('Pengiriman APK gagal atau belum terkonfirmasi. Periksa Telegram sebelum retry manual; detail/token disembunyikan.')
+          PY
+
+      - name: 🧹 Bersihkan material signing CI
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +x
+          set -euo pipefail
+          rm -f -- android/key.properties android/app/google-services.json
+          rm -rf -- "${RUNNER_TEMP:?}/samudera-signing"
