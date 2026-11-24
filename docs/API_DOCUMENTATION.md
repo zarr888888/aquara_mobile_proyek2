@@ -1,5 +1,31 @@
 # Security Contract
 
+## Pesanan eceran — kandidat 24 November 2026
+
+Seluruh rute berikut berawalan `/api`, membutuhkan Sanctum, dan tidak memakai `pre-order` atau tonase. Produk lama tetap memiliki `satuan_jual:null`: tidak bisa dipesan sampai pemilik secara eksplisit menetapkan satuan **dan** harga. Harga daftar produk adalah rupiah per satuan setelah penawaran ditetapkan.
+
+| Method dan path | Request | Hasil |
+|---|---|---|
+| PUT `pasars/{id}/retail-offer` | `satuan_jual`: kg, ekor, atau kemasan; `harga`: integer 1–999999999 | 200 `success:true,data:produk`. Pemilik saja; nonpemilik 404; bukan eceran 422. |
+| POST `retail-orders` | `pasar_id`, `jumlah` string desimal kanonik, `expected_unit`, `expected_price` | 201 `success:true,data:pesanan`. Dua field expected hanya prasyarat kecocokan; bukan sumber perhitungan. Produk hilang 404, milik sendiri 403, penawaran usang/belum lengkap/bukan eceran 409. |
+| GET `retail-orders?page=N` | page integer positif, default 1 | 200 `success:true,data:paginator`, daftar di `data.data`, 20 per halaman, terbaru dahulu. Hanya pesanan sebagai pembeli/penjual. Jangan mengikuti URL absolut dari paginator. |
+| PUT `retail-orders/{id}/confirmation` | Tidak ada body/query | 200 `success:true,data:pesanan`; idempoten, khusus penjual yang disimpan pada pesanan. Pembeli atau pihak lain 404. |
+
+`jumlah` > 0, maksimal 6 digit sebelum titik; kg maksimal 3 angka desimal (contoh `1.250`), ekor/kemasan hanya digit bulat. Backend mengunci produk, mengambil harga saat itu, menghitung perkalian tanpa float, membulatkan sekali ke rupiah terdekat (setengah ke atas), menolak total di bawah Rp1. Mutasi menolak field tambahan dengan 422. POST dibatasi 20/menit, handle 429/Retry-After; tidak ada retry otomatis. Jika timeout, cek riwayat sebelum mengulang. Tidak ada reservasi stok atau pemrosesan pembayaran.
+
+Pesanan mengandung `id,buyer_id,seller_id,pasar_id,nama_ikan,satuan_jual,harga_satuan,jumlah,total_harga,status_bayar,confirmed_at,created_at,updated_at`. `jumlah` dalam respons string tiga desimal; `harga_satuan,total_harga` integer rupiah. Nama, identitas penjual, satuan dan harga tersimpan sebagai snapshot meskipun produk diubah/dihapus. `confirmed_at:null` menunggu; timestamp berarti penjual sudah konfirmasi. `status_bayar` awal `Belum Bayar` dan tidak berubah oleh konfirmasi. Pembayaran langsung ke penjual, bukan gateway. Rute grosir tetap terpisah.
+
+
+## Omni-Search Flutter — 18 November 2026
+
+Beranda dan Semua Layanan berbagi satu input: filter layanan/kategori lokal bekerja saat mengetik, termasuk untuk guest. Tombol Cari konten atau aksi Cari pada keyboard mengirim `GET search` hanya untuk sesi login. App bar Pasar, Forum, dan Berita membuka versi khusus konten dari layar yang sama; navbar tidak berubah. Sumber yang dicari adalah produk, isi posting Forum, dan Berita, bukan judul Forum atau artikel bantuan statis.
+
+`q` dikirim sebagai query parameter (1–100 code point setelah trim). `data.pasar`, `data.forum`, `data.berita` masing-masing memiliki `data` dan `meta`. Muat lagi mengirim hanya parameter halaman kelompok terkait, sampai halaman 1000, dan menggabungkan berdasarkan ID dalam kelompok itu. `title:null` pada Forum bukan kesalahan; `summary` dan `thumbnail` dapat null. Preview tidak dipakai sebagai detail.
+
+Ketukan membaca satu objek `success:true,data:{...}` dari `pasars/{id}`, `forum/{id}`, atau `posts/{id}` dan memeriksa ID sebelum navigasi. Detail Forum memakai `comments_count`, bukan panjang `comments`; komentar/balasan dimuat melalui layar komentar existing. Semua pembacaan konten memakai expectedSession. 401 ditangani ApiClient; 404 tidak memutus sesi. Cooldown search terpisah dari cooldown detail bersama. Tidak ada cache disk atau retry otomatis. Kontrak server acuan: `C:/laragon/www/aquara_proyek2/docs/API_DOCUMENTATION.md`, bagian Omni-Search dan Detail konten berdasarkan ID.
+
+**Verifikasi lokal:** 42 tes terarah dan 779 tes suite penuh lulus dengan transport pengujian; lihat TODO untuk baseline analyzer dan gate emulator. Bukan verifikasi API nyata, integrasi perangkat, performa backend, atau rilis.
+
 Kontrak wajib untuk frontend SAMUDERA (Web/Flutter). Dokumentasi ini disusun pada **29 September 2026** dari route, controller, model, policy, dan service pada workspace, bukan dari rancangan fitur yang belum diimplementasikan.
 
 ## Autentikasi dan akses data
@@ -494,19 +520,19 @@ Model menambahkan `image_url`. **Catatan kompatibilitas implementasi:** accessor
 
 ## 6. Forum komunitas
 
-**Akses semua endpoint bagian ini:** Sanctum. `{id}` adalah ID posting, kecuali endpoint hapus komentar yang memakai ID komentar. `user_id` dan nama penulis untuk pembuatan posting/komentar ditentukan backend.
+**Akses semua endpoint bagian ini:** Sanctum. `{id}` adalah ID posting, kecuali `/forum/comment/{id}` dan turunannya yang memakai ID komentar. Identitas penulis ditentukan backend. Bagian forum dicocokkan dengan controller Laravel lokal pada 24 Oktober 2026; ini bukan verifikasi deployment. Migration thread/like komentar belum diterapkan pada database pengembangan.
 
 ### GET /api/forum
 
-**Query:** `mine` opsional boolean, gunakan `mine=1` untuk Forum Saya. Tanpa filter ini semua posting diambil. **Body:** tidak ada. Tidak memakai pagination.
+**Query:** `mine=1` untuk Forum Saya (filter server), `page >= 1`, `per_page` 1–50, default 20. **Body:** tidak ada. Flutter membentuk nomor halaman sendiri, menggabungkan ID unik, mempertahankan daftar saat halaman berikut gagal, dan refresh dari halaman pertama.
 
-**200:** Terbaru dahulu; `comments`, `likes`, `user`, `comments.user`, hitungan like/komentar dan flag milik pengguna disertakan.
+**200:** Terbaru dahulu (created_at dan id descending). `data` array posting, `meta` memuat current_page/per_page/total/last_page. `comments` hanya preview maksimal tiga komentar utama, bukan seluruh komentar. Array `likes` tidak dikirim; gunakan likes_count/is_liked_by_me. comments_count mencakup balasan; root_comments_count hanya induk.
 
 ```json
-{"success":true,"data":[{"id":1,"user_id":1,"author_name":"Budi","content":"Bagaimana merawat kolam?","image":null,"likes_count":0,"comments_count":0,"is_liked_by_me":false,"created_at":"2026-09-29T07:00:00.000000Z","updated_at":"2026-09-29T07:00:00.000000Z","comments":[],"likes":[],"user":{"id":1,"name":"Budi","email":"nelayan@example.test","phone":"081234567890"}}]}
+{"success":true,"data":[{"id":1,"user_id":1,"author_name":"Budi","content":"Bagaimana merawat kolam?","image":null,"likes_count":0,"comments_count":0,"root_comments_count":0,"is_liked_by_me":false,"created_at":"2026-09-29T07:00:00.000000Z","updated_at":"2026-09-29T07:00:00.000000Z","comments":[],"user":{"id":1,"name":"Budi"}}],"meta":{"current_page":1,"per_page":20,"total":1,"last_page":1}}
 ```
 
-Item `comments` memuat `id`, `community_post_id`, `user_id`, `author_name`, `content`, timestamps dan relasi `user`; item `likes` memuat atribut model like, termasuk `user_id` dan `community_post_id`.
+Objek komentar memuat id, community_post_id, user_id (string legacy), author_name, content, parent_id nullable, created_at/updated_at, likes_count/replies_count integer, is_liked_by_me boolean, dan user nullable (id/name/foto_profil). Flutter menormalisasi user_id numerik untuk ownership; nama bukan bukti kepemilikan. Payload malformed ditolak, bukan diubah menjadi daftar/count kosong.
 
 ### POST /api/forum
 
@@ -578,23 +604,33 @@ Jika like dibatalkan:
 
 ### POST /api/forum/{id}/comment
 
-**Path:** ID posting. **Body JSON:** `content` wajib string maksimal 5000 karakter.
+**Path:** ID posting. **Body JSON:** `content` wajib string tidak kosong maksimal 5000 karakter; `parent_id` opsional untuk balasan ke komentar utama pada posting sama. Satu tingkat saja; membalas balasan memakai ID induk utamanya. Tidak menginferensikan thread dari mention.
 
 ```json
 {"content":"Saya juga ingin mengetahui jawabannya."}
 ```
 
-**200** (bukan 201):
+**200** (bukan 201), wajib objek komentar valid:
 
 ```json
-{"success":true}
+{"success":true,"data":{"id":10,"community_post_id":1,"user_id":"1","author_name":"Budi","content":"Saya juga ingin mengetahui jawabannya.","parent_id":null,"created_at":"2026-10-24T01:00:00Z","updated_at":"2026-10-24T01:00:00Z","likes_count":0,"replies_count":0,"is_liked_by_me":false,"user":null}}
 ```
 
 `404` bila posting tidak ada; `422` untuk komentar tidak valid.
 
+### Edit, suka, dan pagination komentar (24 Oktober 2026)
+
+- `PATCH /api/forum/comment/{id}`: hanya `content`, pemilik saja. Jangan kirim user_id/author_name/community_post_id/parent_id, termasuk null. Respons 200 success/data objek komentar; UI memakai objek server dan mempertahankan draft saat gagal.
+- `PUT /api/forum/comment/{id}/like` memastikan suka; `DELETE` path sama memastikan batal suka. Tanpa body, bukan toggle. Respons 200 `{"success":true,"data":{"id":10,"likes_count":2,"is_liked_by_me":true}}` (false untuk unlike). Count/flag berasal dari server; aksi ganda per komentar diblokir.
+- `GET /api/forum/{id}/comments`: hanya induk. `GET /api/forum/comment/{id}/replies`: balasan langsung. Pagination 20 default/50 maksimum, ID ascending, array `data.data`, metadata paginator di `data`. Halaman di luar akhir kosong. Flutter tidak mengikuti URL absolut paginator dan tidak mengirim Bearer ke origin lain.
+- Semua request melalui ApiClient/expectedSession existing. 401 terpusat; 403/404 bukan logout; 422 hanya field dikenal ditampilkan secara aman; 429 memakai Retry-After atau jeda lokal berlabel. Timeout/network/malformed mutation tidak diulang otomatis; UI menyediakan muat ulang untuk memeriksa hasil yang belum pasti.
+- Layar komentar memakai SessionBoundary/Navigator existing. Draft, daftar dan thread hanya memori, dibersihkan pada pergantian sesi; respons lama diabaikan. Refresh/mutasi membatalkan penerapan hasil GET lama.
+
 ### DELETE /api/forum/comment/{id}
 
 **Path:** ID **komentar** milik sendiri, bukan ID posting. **Body/Query:** tidak ada.
+
+Hapus induk menghapus permanen seluruh balasan (termasuk milik pengguna lain) serta like terkait; UI meminta konfirmasi eksplisit. Hapus balasan mempertahankan induk. Muat ulang halaman/count setelah mutasi karena pagination offset dapat bergeser. 404 legacy tetap `{"success":false}`; replies dari induk yang hilang juga 404.
 
 **200:**
 
@@ -812,7 +848,7 @@ URL pagination mengikuti host deployment dan label dapat mengikuti bahasa framew
 
 **Akses semua endpoint bagian ini:** Sanctum. **Rate limit:** total 10 request/menit per user untuk kirim, riwayat, dan detail bersama-sama. Respons sukses memakai `Cache-Control: private, no-store`.
 
-Asisten ini **simulasi dengan jawaban tetap**, bukan integrasi LLM. Tampilkan penanda simulasi; jangan menjadikannya layanan tanggap darurat atau meminta pengguna mengirim rahasia.
+Backend menggunakan OpenAI Responses API (`gpt-5.4-mini`, `store:false`) jika `OPENAI_API_KEY` tersedia. Tanpa kunci, jawaban berbasis aturan berlabel Simulasi. Jika provider gagal atau teks tidak lengkap, POST mengembalikan 503 tanpa menyimpan pasangan chat. Hanya hasil AI sukses memiliki `is_mock:false`. Field `is_mock` dilarang pada input; jangan menjadikannya layanan tanggap darurat atau meminta pengguna mengirim rahasia.
 
 ### POST /api/asisten/chat
 
@@ -830,7 +866,7 @@ Backend mendekode HTML entities, menghapus tag HTML/karakter kontrol, merapikan 
 {"success":true,"message":"Pesan berhasil diproses","data":{"id":1,"message":"Bagaimana membuat pre-order grosir?","reply":"[Asisten SAMUDERA — simulasi] Pilih komoditas grosir, isi tonase dan tanggal pengambilan melalui fitur Bursa Grosir.","is_mock":true,"created_at":"2026-09-29T08:00:00.000000Z"}}
 ```
 
-Jawaban dipilih dari kata kunci SOS/darurat, grosir/pre-order, cuaca, atau jawaban default. Jangan mengasumsikan format respons POST sama dengan GET: POST memetakan `pertanyaan`/`jawaban` menjadi `message`/`reply`.
+Pada mode simulasi, jawaban dipilih dari kata kunci SOS/darurat, grosir/pre-order, cuaca, atau jawaban default. Jangan mengasumsikan format respons POST sama dengan GET: POST memetakan `pertanyaan`/`jawaban` menjadi `message`/`reply`.
 
 ### GET /api/asisten/chat
 
@@ -860,7 +896,7 @@ Jawaban dipilih dari kata kunci SOS/darurat, grosir/pre-order, cuaca, atau jawab
 }
 ```
 
-GET mengembalikan field model `pertanyaan`/`jawaban`, **tidak menambahkan `is_mock`**. Frontend tetap harus menandai fitur sebagai simulasi. Metadata pagination mengikuti ketentuan yang sama dengan riwayat pre-order.
+GET mengembalikan `pertanyaan`, `jawaban`, dan boolean `is_mock` per balasan (baris lama: true). Jika respons riwayat backend lama tidak memiliki field tersebut, Flutter menampilkan Simulasi. Metadata pagination mengikuti ketentuan yang sama dengan riwayat pre-order.
 
 ### GET /api/asisten/chat/{id}
 

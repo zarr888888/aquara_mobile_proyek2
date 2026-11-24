@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/samudera_branding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aquara_mobile/screens/onboarding_screen.dart';
 import 'home_screen.dart';
@@ -96,51 +97,55 @@ class _SplashScreenState extends State<SplashScreen> {
       body: Container(
         color: const Color(0xFF009FE3),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_error != null) ...[
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(_error!, textAlign: TextAlign.center),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_error != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(_error!, textAlign: TextAlign.center),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      setState(() => _error = null);
+                      _checkDestination();
+                    },
+                    child: const Text('Coba kembali'),
+                  ),
+                ],
+                Container(
+                  padding: const EdgeInsets.only(top: 20, bottom: 20),
+                  child: Image.asset(
+                    samuderaLogoAsset,
+                    height: 180,
+                    semanticLabel: 'Logo SAMUDERA',
+                    fit: BoxFit.contain,
+                  ),
                 ),
-                FilledButton(
-                  onPressed: () {
-                    setState(() => _error = null);
-                    _checkDestination();
-                  },
-                  child: const Text('Coba kembali'),
+                const SizedBox(height: 30),
+                Text(
+                  "SAMUDERA",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 40,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "Solusi Digital PERIKANAN & KELAUTAN",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500, // Medium
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ],
-              Container(
-                padding: const EdgeInsets.only(top: 20, bottom: 20),
-                child: Image.asset(
-                  "assets/logo2.png",
-                  height: 120,
-                  fit: BoxFit.contain,
-                ),
-              ),
-              const SizedBox(height: 30),
-              Text(
-                "AQUARA",
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 40,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 4,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                "Solusi Digital Budidaya Ikan Air Tawar",
-                style: GoogleFonts.poppins(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500, // Medium
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

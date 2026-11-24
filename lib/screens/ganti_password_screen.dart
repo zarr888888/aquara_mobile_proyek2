@@ -1,3 +1,4 @@
+import '../widgets/samudera_theme.dart';
 import '../widgets/session_boundary.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -67,7 +68,7 @@ class _GantiPasswordScreenState extends State<_GantiPasswordScreenContent>
                 ? 'Kata sandi berhasil diubah.'
                 : result.failure!.message,
           ),
-          backgroundColor: Colors.green,
+          backgroundColor: SamuderaColors.green,
         ),
       );
       Navigator.pop(
@@ -81,7 +82,7 @@ class _GantiPasswordScreenState extends State<_GantiPasswordScreenContent>
                 ? 'Kata sandi berhasil diubah.'
                 : result.failure!.message,
           ),
-          backgroundColor: Colors.red,
+          backgroundColor: SamuderaColors.orange,
         ),
       );
     }
@@ -119,12 +120,15 @@ class _GantiPasswordScreenState extends State<_GantiPasswordScreenContent>
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: SamuderaColors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, color: Colors.orange),
+                      const Icon(
+                        Icons.info_outline,
+                        color: SamuderaColors.orange,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_version_label.dart';
+import '../widgets/samudera_branding.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class TentangAquaraScreen extends StatelessWidget {
@@ -9,12 +11,21 @@ class TentangAquaraScreen extends StatelessWidget {
     final indramayuBlue = const Color(0xFF009FE3);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        title: Text("Tentang AQUARA", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: Text(
+          "Tentang SAMUDERA",
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
         backgroundColor: indramayuBlue,
         elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -23,43 +34,77 @@ class TentangAquaraScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 150,
-                height: 150,
+                width: 200,
+                height: 200,
                 decoration: BoxDecoration(
-                  color: indramayuBlue.withOpacity(0.05), 
+                  color: indramayuBlue.withOpacity(0.05),
                   shape: BoxShape.circle,
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(75),
-                  child: Image.asset(
-                    'assets/logo.jpeg', 
-                    fit: BoxFit.contain,
-                  ),
+                child: Image.asset(
+                  samuderaLogoAsset,
+                  fit: BoxFit.contain,
+                  semanticLabel: 'Logo SAMUDERA',
                 ),
               ),
               const SizedBox(height: 20),
-              Text("AQUARA", style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.w900, color: indramayuBlue, letterSpacing: 2)),
-              Text("Versi 1.0.0", style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey)),
+              Text(
+                "SAMUDERA",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  color: indramayuBlue,
+                  letterSpacing: 2,
+                ),
+              ),
+              AppVersionLabel(
+                style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
+              ),
               const SizedBox(height: 30),
               Text(
-                "AQUARA adalah Sitem Informasi Pasar dan Analisa Usaha & Edukasi yang dikembangkan untuk mendukung para pembudidaya ikan.",
+                "SAMUDERA adalah Sistem Aplikasi Manajemen Usaha, Data, dan Edukasi Perikanan & Kelautan yang dikembangkan untuk mendukung para pembudidaya ikan dan nelayan.",
                 textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87, height: 1.6),
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurface,
+                  height: 1.6,
+                ),
               ),
               const SizedBox(height: 20),
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.withOpacity(0.2))),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                ),
                 child: Column(
                   children: [
-                    Text("Bekerja Sama Dengan:", style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600])),
+                    Text(
+                      "Bekerja Sama Dengan:",
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                     const SizedBox(height: 8),
-                    Text("Dinas Perikanan dan Kelautan (Diskanla)\nKabupaten Indramayu", textAlign: TextAlign.center, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    Text(
+                      "Dinas Perikanan dan Kelautan (Diskanla)\nKabupaten Indramayu",
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 40),
-              Text("© 2026 Hak Cipta Dilindungi", style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey)),
+              Text(
+                "© 2026 Hak Cipta Dilindungi",
+                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+              ),
             ],
           ),
         ),

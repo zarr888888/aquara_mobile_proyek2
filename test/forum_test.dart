@@ -21,17 +21,65 @@ Map<String, dynamic> post({int id = 1, int? owner = 1}) => {
   'author_name': 'Sama',
   'user': null,
   'comments': [
-    {'id': 10, 'user_id': 1, 'author_name': 'Sama', 'content': 'Komentar saya'},
-    {'id': 11, 'user_id': 2, 'author_name': 'Sama', 'content': 'Komentar lain'},
+    comment(id: 10, postId: id),
+    comment(id: 11, owner: '2', postId: id, content: 'Komentar lain'),
   ],
   'image': null,
   'likes_count': '0',
   'comments_count': 2,
+  'root_comments_count': 2,
   'is_liked_by_me': false,
   'created_at': 'broken',
 };
-http.Response listing(List<Object?> rows) =>
-    http.Response(jsonEncode({'success': true, 'data': rows}), 200);
+Map<String, dynamic> comment({
+  int id = 10,
+  String owner = '1',
+  int postId = 1,
+  int? parent,
+  String content = 'Komentar saya',
+  int replies = 0,
+  int likes = 0,
+  bool liked = false,
+}) => {
+  'id': id,
+  'user_id': owner,
+  'community_post_id': postId,
+  'parent_id': parent,
+  'author_name': 'Sama',
+  'content': content,
+  'user': null,
+  'created_at': '2026-10-24T01:00:00Z',
+  'updated_at': '2026-10-24T01:00:00Z',
+  'likes_count': likes,
+  'replies_count': replies,
+  'is_liked_by_me': liked,
+};
+Map<String, dynamic> meta({int page = 1, int last = 1, int total = 2}) => {
+  'current_page': page,
+  'last_page': last,
+  'per_page': 20,
+  'total': total,
+};
+http.Response listing(List<Object?> rows, {int page = 1, int last = 1}) =>
+    http.Response(
+      jsonEncode({
+        'success': true,
+        'data': rows,
+        'meta': meta(page: page, last: last, total: rows.length),
+      }),
+      200,
+    );
+http.Response commentsListing(
+  List<Object?> rows, {
+  int page = 1,
+  int last = 1,
+}) => http.Response(
+  jsonEncode({
+    'success': true,
+    'data': {...meta(page: page, last: last, total: rows.length), 'data': rows},
+  }),
+  200,
+);
 
 void main() {
   late SessionService session;
@@ -45,7 +93,12 @@ void main() {
     await session.saveIfCurrent('A', user: {'id': 1, 'name': 'A'});
     requests.clear();
     handler = (r) async => r.method == 'GET'
-        ? listing([post()])
+        ? r.url.path.endsWith('/comments')
+              ? commentsListing([
+                  comment(),
+                  comment(id: 11, owner: '2', content: 'Komentar lain'),
+                ])
+              : listing([post()])
         : http.Response('{"success":true}', 200);
     api = ApiService(
       session: session,
@@ -219,7 +272,7 @@ void main() {
     expect(requests.where((r) => r.method == 'POST'), hasLength(1));
     expect(tester.takeException(), isNull);
   });
-  testWidgets('loading and deduplicated read before response', (tester) async {
+  testWidgets('loading prevents duplicate next-page UI reads', (tester) async {
     await initialize();
     final pending = Completer<http.Response>();
     handler = (_) => pending.future;
@@ -227,10 +280,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.byType(CircularProgressIndicator), findsWidgets);
-    final s = await session.snapshot();
-    final duplicate = api.fetchForumPosts(expectedSession: s);
     pending.complete(listing([]));
-    await duplicate;
     await tester.pumpAndSettle();
     expect(requests, hasLength(1));
     expect(find.text('Belum ada diskusi.'), findsOneWidget);
@@ -256,8 +306,8 @@ void main() {
             '${r.method} ${r.url.path}${r.url.hasQuery ? '?${r.url.query}' : ''}',
       ),
       [
-        'GET /api/forum',
-        'GET /api/forum?mine=1',
+        'GET /api/forum?page=1&per_page=20',
+        'GET /api/forum?page=1&per_page=20&mine=1',
         'POST /api/forum',
         'POST /api/forum/3/update',
         'DELETE /api/forum/3',
@@ -283,7 +333,7 @@ void main() {
       handler = (_) async => listing([
         {
           ...post(id: 2),
-          'comments': null,
+          'comments': [],
           'image': 'https://res.cloudinary.com/a.jpg',
           'user': {'id': 1, 'name': 'Name', 'email': 'private'},
         },
@@ -439,19 +489,28 @@ void main() {
     tester,
   ) async {
     await initialize();
-    handler = (_) async => listing([post(), post(id: 2, owner: 2)]);
+    handler = (r) async => r.url.path.endsWith('/comments')
+        ? commentsListing([
+            comment(),
+            comment(id: 11, owner: '2', content: 'Komentar lain'),
+          ])
+        : listing([post(), post(id: 2, owner: 2)]);
     await tester.pumpWidget(
       MaterialApp(home: ForumScreen(api: api, mine: true)),
     );
     await tester.pumpAndSettle();
     expect(find.text('Forum Saya'), findsOneWidget);
-    expect(requests.single.url.query, 'mine=1');
+    expect(requests.single.url.queryParameters, {
+      'page': '1',
+      'per_page': '20',
+      'mine': '1',
+    });
     expect(find.byType(PopupMenuButton<String>), findsOneWidget);
     await tester.tap(find.byTooltip('Komentar').first);
     await tester.pumpAndSettle();
     expect(find.byTooltip('Hapus komentar'), findsOneWidget);
     expect(find.text('Komentar lain'), findsOneWidget);
-    expect(requests, hasLength(1));
+    expect(requests, hasLength(2));
   });
   testWidgets(
     'duplicate like blocked; success then refresh failure is not mutation failure',

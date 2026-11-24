@@ -1,6 +1,32 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'reference_data.dart';
 
 const sosTypes = ['Wabah Penyakit', 'Pencemaran Limbah', 'Cuaca Ekstrem'];
+
+String? _sosPhoto(Object? value) {
+  const demo =
+      kDebugMode &&
+      bool.fromEnvironment('SAMUDERA_SOS_DEMO') &&
+      String.fromEnvironment('SAMUDERA_API_URL') ==
+          'http://127.0.0.1:18746/api';
+  const prefix = 'http://127.0.0.1:18746/demo-media/';
+  if (demo && value is String && value.startsWith(prefix)) {
+    final path = value.substring(prefix.length);
+    // Check raw segments before URI normalization; no traversal, escapes,
+    // query credentials, or alternate authority are accepted.
+    final safe = path
+        .split('/')
+        .every(
+          (s) =>
+              s.isNotEmpty &&
+              s != '.' &&
+              s != '..' &&
+              !s.contains(RegExp(r'[^A-Za-z0-9._-]')),
+        );
+    return safe ? value : null;
+  }
+  return referenceImage({'image': value});
+}
 
 class SosReport {
   const SosReport(
@@ -35,7 +61,7 @@ class SosReport {
       const ['Pending', 'Diproses', 'Selesai'].contains(status)
           ? status
           : 'Status belum tersedia',
-      referenceImage({'image': raw['foto']}),
+      _sosPhoto(raw['foto']),
       raw['created_at'] is String ? DateTime.tryParse(raw['created_at']) : null,
     );
   }

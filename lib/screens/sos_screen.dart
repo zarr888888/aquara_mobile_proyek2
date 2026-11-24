@@ -19,12 +19,16 @@ class SosScreen extends StatelessWidget {
     this.id,
     this.pickPhoto,
     this.clock,
+    this.initialPhoto,
+    this.photoOwner,
   });
   final ApiService? api;
   final SosPage page;
   final int? id;
   final Future<XFile?> Function(ImageSource)? pickPhoto;
   final DateTime Function()? clock;
+  final SosPhoto? initialPhoto;
+  final SessionSnapshot? photoOwner;
 
   @override
   Widget build(BuildContext context) => SessionBoundary(
@@ -35,6 +39,8 @@ class SosScreen extends StatelessWidget {
       id: id,
       picker: pickPhoto,
       clock: clock,
+      initialPhoto: initialPhoto,
+      photoOwner: photoOwner,
     ),
   );
 }
@@ -46,12 +52,16 @@ class _SosContent extends StatefulWidget {
     this.id,
     this.picker,
     this.clock,
+    this.initialPhoto,
+    this.photoOwner,
   });
   final ApiService api;
   final SosPage page;
   final int? id;
   final Future<XFile?> Function(ImageSource)? picker;
   final DateTime Function()? clock;
+  final SosPhoto? initialPhoto;
+  final SessionSnapshot? photoOwner;
   @override
   State<_SosContent> createState() => _SosState();
 }
@@ -83,6 +93,12 @@ class _SosState extends State<_SosContent>
   void initState() {
     super.initState();
     openProfileCooldown();
+    if (widget.page == SosPage.form &&
+        widget.photoOwner != null &&
+        widget.photoOwner!.isAuthenticated &&
+        stateSession.owns(widget.photoOwner!)) {
+      _photo = widget.initialPhoto;
+    }
     _subscription = stateSession.changes.listen((_) {
       if (!sessionActive) {
         _operation++;

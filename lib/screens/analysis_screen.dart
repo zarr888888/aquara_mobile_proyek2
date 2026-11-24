@@ -1,3 +1,4 @@
+import '../widgets/samudera_theme.dart';
 import '../widgets/reference_list_builder.dart';
 import '../services/api_result.dart';
 import '../services/session_service.dart';
@@ -188,40 +189,95 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
     super.dispose();
   }
 
+  double _readInput(
+    String text,
+    String label, {
+    bool integer = false,
+    bool positive = false,
+  }) {
+    final value = text.trim();
+    if (value.isEmpty) throw FormatException('$label wajib diisi.');
+    final pattern = integer ? r'^[0-9]+$' : r'^[0-9]+(?:,[0-9]+)?$';
+    if (!RegExp(pattern).hasMatch(value)) {
+      throw FormatException(
+        integer
+            ? '$label harus bilangan bulat tanpa pemisah ribuan atau tanda negatif.'
+            : '$label: gunakan angka tanpa pemisah ribuan, koma untuk desimal, tanpa tanda negatif.',
+      );
+    }
+    final number = double.tryParse(value.replaceAll(',', '.'));
+    if (number == null || !number.isFinite) {
+      throw FormatException('$label terlalu besar. Kurangi nilainya.');
+    }
+    if (positive && number <= 0) {
+      throw FormatException('$label harus lebih dari nol.');
+    }
+    // The calculation uses doubles; larger counts cannot represent every integer.
+    if (integer && number > 9007199254740991) {
+      throw FormatException(
+        '$label terlalu besar untuk dihitung secara tepat.',
+      );
+    }
+    return number;
+  }
+
+  double _readParameter(
+    String key,
+    String label, {
+    bool positive = false,
+    double? maximum,
+  }) {
+    final number = double.tryParse(_selectedFish![key].toString());
+    if (number == null ||
+        !number.isFinite ||
+        number < 0 ||
+        (positive && number == 0) ||
+        (maximum != null && number > maximum)) {
+      throw FormatException(
+        'Parameter $label dari server tidak valid. '
+        'Pilih komoditas lain atau coba muat ulang data.',
+      );
+    }
+    return number;
+  }
+
   void _hitungAnalisa() {
-    if (_selectedFish == null ||
-        _jumlahBibitController.text.isEmpty ||
-        _luasKolamController.text.isEmpty) {
+    setState(() => _showResult = false);
+    if (_selectedFish == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Harap lengkapi semua data input!")),
+        const SnackBar(content: Text('Pilih komoditas terlebih dahulu.')),
       );
       return;
     }
 
     try {
-      double luasKolam = double.parse(
-        _luasKolamController.text.replaceAll('.', ''),
+      double luasKolam = _readInput(
+        _luasKolamController.text,
+        'Luas kolam',
+        positive: true,
       );
-      double jumlahBibit = double.parse(
-        _jumlahBibitController.text.replaceAll('.', ''),
+      double jumlahBibit = _readInput(
+        _jumlahBibitController.text,
+        'Jumlah bibit',
+        integer: true,
       );
-      double hargaBibitPerEkor = double.parse(
-        _hargaBibitController.text.replaceAll('.', ''),
+      double hargaBibitPerEkor = _readInput(
+        _hargaBibitController.text,
+        'Harga bibit',
       );
-      double biayaLainInput = double.parse(
-        _biayaLainController.text.replaceAll('.', ''),
+      double biayaLainInput = _readInput(
+        _biayaLainController.text,
+        'Biaya operasional',
       );
 
-      double fcr = double.parse(_selectedFish!['fcr_ratio'].toString());
-      double sr = double.parse(_selectedFish!['survival_rate'].toString());
-      double hargaPakan = double.parse(
-        _selectedFish!['feed_price_per_kg'].toString(),
-      );
-      double hargaJual = double.parse(
-        _selectedFish!['market_price_per_kg'].toString(),
-      );
-      double maxPadat = double.parse(
-        _selectedFish!['standard_density_per_m2'].toString(),
+      double fcr = _readParameter('fcr_ratio', 'FCR');
+      double sr = _readParameter('survival_rate', 'SR (0–100%)', maximum: 100);
+      double hargaPakan = _readParameter('feed_price_per_kg', 'harga pakan');
+      double hargaJual = _readParameter('market_price_per_kg', 'harga jual');
+      double maxPadat = _readParameter(
+        'standard_density_per_m2',
+        'kepadatan',
+        positive: true,
       );
 
       double kepadatanAktual = jumlahBibit / luasKolam;
@@ -231,15 +287,15 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
       if (kepadatanAktual > maxPadat) {
         status =
             "BERISIKO TINGGI (Kepadatan ${kepadatanAktual.toStringAsFixed(0)} ekor/m²)";
-        warna = Colors.red;
+        warna = SamuderaColors.orange;
       } else if (kepadatanAktual > (maxPadat * 0.8)) {
         status =
             "CUKUP PADAT (Kepadatan ${kepadatanAktual.toStringAsFixed(0)} ekor/m²)";
-        warna = Colors.orange;
+        warna = SamuderaColors.orange;
       } else {
         status =
             "IDEAL (Kepadatan ${kepadatanAktual.toStringAsFixed(0)} ekor/m²)";
-        warna = Colors.green;
+        warna = SamuderaColors.green;
       }
 
       double ikanHidup = jumlahBibit * (sr / 100);
@@ -254,6 +310,21 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
       double totalOmzet = totalPanenKg * hargaJual;
       double totalUntung = totalOmzet - modalTotal;
 
+      if (![
+        kepadatanAktual,
+        totalPanenKg,
+        totalPakanKg,
+        totalBiayaBibit,
+        totalBiayaPakan,
+        modalTotal,
+        totalOmzet,
+        totalUntung,
+      ].every((v) => v.isFinite)) {
+        throw const FormatException(
+          'Nilai terlalu besar untuk dihitung. Kurangi input atau periksa parameter komoditas.',
+        );
+      }
+
       setState(() {
         _estimasiPanenKg = totalPanenKg;
         _kebutuhanPakanKg = totalPakanKg;
@@ -267,10 +338,10 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
         _warnaStatusKepadatan = warna;
         _showResult = true;
       });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Pastikan input angka valid!")),
-      );
+    } on FormatException catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -314,6 +385,11 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
+                    ),
+                    const Text(
+                      'Tanpa pemisah ribuan (contoh: 1000). '
+                      'Gunakan koma untuk desimal (contoh: 12,5). '
+                      'Jumlah bibit harus bilangan bulat. Luas harus lebih dari nol; biaya boleh nol.',
                     ),
                     const SizedBox(height: 15),
 
@@ -364,7 +440,9 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
                         Expanded(
                           child: TextField(
                             controller: _luasKolamController,
-                            keyboardType: TextInputType.number,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             decoration: InputDecoration(
                               labelText: "Luas Kolam",
                               hintText: "m²",
@@ -396,7 +474,9 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
 
                     TextField(
                       controller: _hargaBibitController,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: InputDecoration(
                         labelText: "Harga Bibit per Ekor",
                         prefixText: "Rp ",
@@ -409,7 +489,9 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
 
                     TextField(
                       controller: _biayaLainController,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: InputDecoration(
                         labelText: "Biaya Operasional (Listrik/Obat)",
                         prefixText: "Rp ",
@@ -497,7 +579,7 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.green.withOpacity(0.3),
+                      color: SamuderaColors.green.withOpacity(0.3),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -545,7 +627,7 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
                       "Total Modal",
                       formatRupiah(_totalModal),
                       Icons.account_balance_wallet,
-                      Colors.orange,
+                      SamuderaColors.orange,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -554,7 +636,7 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
                       "Est. Omzet",
                       formatRupiah(_omzet),
                       Icons.store,
-                      Colors.blue,
+                      SamuderaColors.blue,
                     ),
                   ),
                 ],
@@ -567,7 +649,7 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
                       "Biaya Pakan",
                       formatRupiah(_biayaPakan),
                       Icons.restaurant,
-                      Colors.redAccent,
+                      SamuderaColors.orange,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -576,7 +658,7 @@ class _AnalysisScreenState extends State<_AnalysisScreenContent>
                       "Biaya Bibit",
                       formatRupiah(_biayaBibit),
                       Icons.spa,
-                      Colors.teal,
+                      SamuderaColors.blue,
                     ),
                   ),
                 ],

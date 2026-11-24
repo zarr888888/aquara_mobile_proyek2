@@ -62,7 +62,31 @@ void main() {
         clock: () => now,
         clientFactory: () => MockClient((r) {
           requests.add(r);
-          return handler(r);
+          return handler(r).then((response) {
+            if (r.method == 'GET' &&
+                r.url.path.contains('/profiles/') &&
+                response.statusCode == 200) {
+              final body = jsonDecode(response.body) as Map;
+              final owner = int.parse(r.url.path.split('/')[3]);
+              final rows = (body['data'] as List)
+                  .where((e) => e['user_id'] == owner)
+                  .toList();
+              return http.Response(
+                jsonEncode({
+                  'success': true,
+                  'data': rows,
+                  'meta': {
+                    'current_page': 1,
+                    'last_page': 1,
+                    'per_page': 20,
+                    'total': rows.length,
+                  },
+                }),
+                200,
+              );
+            }
+            return response;
+          });
         }),
       ),
     );
@@ -89,6 +113,47 @@ void main() {
     await tester.tap(find.text('SIMPAN PERUBAHAN'));
     await tester.pump();
   }
+
+  testWidgets(
+    'focus form validates 255 and blank retains confirmed server value',
+    (tester) async {
+      await initialize(tester);
+      handler = (r) async {
+        if (r.method == 'POST') {
+          expect(jsonDecode(r.body), {'name': 'A'});
+          return http.Response(
+            '{"success":true,"data":{"id":1,"name":"A","fokus_budidaya":"Lele"}}',
+            200,
+          );
+        }
+        if (r.url.path.endsWith('user')) {
+          return http.Response(
+            '{"id":1,"name":"A","fokus_budidaya":"Lele"}',
+            200,
+          );
+        }
+        return listResponse([]);
+      };
+      await mount(tester, ProfilScreen(api: api));
+      await tester.ensureVisible(find.text('EDIT PROFIL LENGKAP'));
+      await tester.tap(find.text('EDIT PROFIL LENGKAP'));
+      await tester.pumpAndSettle();
+      final field = find.byType(TextFormField).last;
+      expect(tester.widget<TextFormField>(field).validator!('x' * 255), isNull);
+      await tester.enterText(field, 'x' * 256);
+      await submit(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Maksimal 255 karakter.'), findsOneWidget);
+      expect(requests.where((r) => r.method == 'POST'), isEmpty);
+      await tester.enterText(field, '   ');
+      await submit(tester);
+      await tester.pumpAndSettle();
+      expect(find.byType(EditProfilScreen), findsNothing);
+      expect(find.text('Lele'), findsOneWidget);
+      expect(requests.where((r) => r.method == 'POST').length, 1);
+      await close(tester);
+    },
+  );
 
   for (final header in [true, false]) {
     for (final editing in [true, false]) {
@@ -308,7 +373,7 @@ void main() {
       await tester.ensureVisible(find.text('Lele 10'));
       await tester.tap(find.text('Lele 10'));
       await tester.pumpAndSettle();
-      expect(find.text('Pasar Ikan Indramayu'), findsOneWidget);
+      expect(find.text('Produk Pasar'), findsOneWidget);
       if (mutation == 'add') {
         await tester.tap(find.text('Jual Hasil Tambak'));
         await tester.pumpAndSettle();
@@ -344,7 +409,7 @@ void main() {
         }
       }
       await tester.pumpAndSettle();
-      expect(find.text('Pasar Ikan Indramayu'), findsOneWidget);
+      expect(find.text('Produk Pasar'), findsOneWidget);
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(find.text('Profil Saya'), findsOneWidget);
@@ -355,7 +420,7 @@ void main() {
               ? 'Added'
               : mutation == 'edit'
               ? 'Edited'
-              : 'Belum ada stok ikan.',
+              : 'Belum ada stok panen.',
         ),
         findsOneWidget,
       );
@@ -397,11 +462,11 @@ void main() {
         );
         await tester.pump();
         await tester.pump();
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
         expect(reads, 1);
         pending.complete(http.Response('{}', status));
         await tester.pumpAndSettle();
-        expect(find.text('Belum ada stok ikan.'), findsNothing);
+        expect(find.text('Belum ada stok panen.'), findsNothing);
         final retry = find.widgetWithText(TextButton, 'Coba lagi');
         await tester.ensureVisible(retry);
         if (status == 429) {
@@ -413,7 +478,7 @@ void main() {
         await tester.tap(retry);
         await tester.tap(retry);
         await tester.pumpAndSettle();
-        expect(find.text('Belum ada stok ikan.'), findsOneWidget);
+        expect(find.text('Belum ada stok panen.'), findsOneWidget);
         expect(reads, 2);
         await close(tester);
       },
@@ -706,7 +771,7 @@ void main() {
             find.text('EDIT PROFIL LENGKAP').hitTestable(),
             findsOneWidget,
           );
-          await tester.ensureVisible(find.text('Belum ada stok ikan.'));
+          await tester.ensureVisible(find.text('Belum ada stok panen.'));
         } else {
           await tester.ensureVisible(
             find.text('Info penyuluhan & berita perikanan'),

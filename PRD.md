@@ -18,7 +18,7 @@ SAMUDERA adalah evolusi dari aplikasi AQUARA yang mencakup seluruh ekosistem Din
 5. **Lapor Darurat:** Form pelaporan spesifik (limbah, cuaca ekstrem, wabah) yang datanya masuk ke dashboard Diskanla.
 6. **Bursa Grosir:** Fitur Pre-Order panen B2B untuk transaksi komoditas skala tonase di dalam Katalog.
 7. **Info Cuaca:** Halaman/Widget penarik data API BMKG (angin, gelombang, pasang surut).
-8. **Perizinan:** Pusat panduan akses pendaftaran E-KUSUKA (SIPI/SIKPI) & asuransi nelayan.
+8. **Perizinan:** Pusat panduan akses KUSUKA (identitas), perizinan kapal SIPI/SIKPI, serta asuransi/perlindungan nelayan; ketiganya bukan layanan yang sama. Implementasi lokal tersedia 27 Oktober 2026; pengujian lokal dicatat di TODO, pemeriksaan emulator dan penerimaan dinas belum selesai. Tidak memproses pengajuan atau menerbitkan izin/polis. Acuan: C:/laragon/www/aquara_mobile/docs/PERIZINAN_SAMUDERA.md.
 9. **Peta TPI:** Peta digital interaktif lokasi pelelangan dan harga ikan real-time.
 10. **Asisten SAMUDERA:** Chatbot helpdesk (mengambang di pojok layar) untuk info birokrasi, smart router navigasi, dan info kilat.
 11. **Infrastruktur Cloud:** Global Search Bar di Beranda & Integrasi Cloudinary untuk semua upload gambar (wajib untuk Heroku).

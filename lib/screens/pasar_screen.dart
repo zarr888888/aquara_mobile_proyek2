@@ -1,6 +1,10 @@
+import '../widgets/samudera_theme.dart';
 import '../widgets/session_boundary.dart';
+import '../widgets/profile_identity.dart';
 import '../widgets/pasar_operation_state.dart';
 import '../models/pasar_item.dart';
+import '../services/omni_search.dart';
+import '../widgets/home_services.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -8,10 +12,21 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import 'tambah_jualan_screen.dart';
 import 'edit_jualan_screen.dart';
+import 'pre_order_screen.dart';
+import 'retail_screen.dart';
 
 class PasarScreen extends StatelessWidget {
+  final Map<String, dynamic>? product;
   final int? targetItemId;
-  const PasarScreen({super.key, this.targetItemId, this.api, this.clock});
+  final int? targetOwnerId;
+  const PasarScreen({
+    super.key,
+    this.product,
+    this.targetItemId,
+    this.targetOwnerId,
+    this.api,
+    this.clock,
+  });
   final DateTime Function()? clock;
   final ApiService? api;
 
@@ -19,14 +34,27 @@ class PasarScreen extends StatelessWidget {
   Widget build(BuildContext context) => SessionBoundary(
     api: api,
     private: true,
-    builder: (_) =>
-        _PasarScreenContent(targetItemId: targetItemId, api: api, clock: clock),
+    builder: (_) => _PasarScreenContent(
+      product: product,
+      targetItemId: targetItemId,
+      targetOwnerId: targetOwnerId,
+      api: api,
+      clock: clock,
+    ),
   );
 }
 
 class _PasarScreenContent extends StatefulWidget {
+  final Map<String, dynamic>? product;
   final int? targetItemId;
-  const _PasarScreenContent({this.targetItemId, this.api, this.clock});
+  final int? targetOwnerId;
+  const _PasarScreenContent({
+    this.product,
+    this.targetItemId,
+    this.targetOwnerId,
+    this.api,
+    this.clock,
+  });
   final DateTime Function()? clock;
   final ApiService? api;
 
@@ -60,6 +88,13 @@ class _PasarScreenState extends State<_PasarScreenContent>
 
   Future<void> _open() async {
     await openPasar();
+    if (pasarActive && widget.product != null) {
+      setState(() {
+        _items = [widget.product!];
+        _loading = false;
+      });
+      return;
+    }
     if (pasarActive) await _refresh();
   }
 
@@ -69,10 +104,62 @@ class _PasarScreenState extends State<_PasarScreenContent>
   }
 
   bool _reading = false;
+  Future<void> _openRetail([Map<String, dynamic>? product]) async {
+    if (!pasarActive || _preOrderOpening) return;
+    _preOrderOpening = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => RetailScreen(api: _apiService, product: product),
+        ),
+      );
+      if (pasarActive && product != null) await _refresh();
+    } finally {
+      _preOrderOpening = false;
+    }
+  }
+
+  bool _preOrderOpening = false;
+  Future<void> _openPreOrder({int? productId}) async {
+    if (!pasarActive || _preOrderOpening) return;
+    _preOrderOpening = true;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PreOrderScreen(
+          api: _apiService,
+          view: productId == null ? PreOrderView.history : PreOrderView.form,
+          id: productId,
+          clock: widget.clock,
+        ),
+      ),
+    );
+    if (pasarActive) _preOrderOpening = false;
+  }
+
   Future<void> _refresh({bool afterMutation = false}) async {
     if (!pasarActive || _reading || pasarRemaining > 0) return;
     _reading = true;
     setState(() => _loading = true);
+    if (widget.product != null) {
+      final result = await _apiService.contentDetail(
+        ContentKind.pasar,
+        widget.product!['id'],
+        pasarOwner!,
+      );
+      if (!pasarActive) return;
+      setState(() {
+        _reading = false;
+        _loading = false;
+        _items = [if (result.isSuccess) result.data!];
+        if (result.failure != null) {
+          pasarFailure(result.failure!);
+        } else {
+          pasarUncertain = false;
+          pasarMessage = null;
+        }
+      });
+      return;
+    }
     final result = await _apiService.fetchPasar(expectedSession: pasarOwner!);
     if (!pasarActive) return;
     _reading = false;
@@ -147,13 +234,28 @@ class _PasarScreenState extends State<_PasarScreenContent>
 
   @override
   Widget build(BuildContext context) {
+    if (widget.product != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Produk Pasar')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            pasarStatus(checkList: _refresh),
+            if (_loading) const LinearProgressIndicator(),
+            for (final item in _items) _buildPasarCard(item),
+            if (!_loading && _items.isEmpty)
+              TextButton(onPressed: _refresh, child: const Text('Coba lagi')),
+          ],
+        ),
+      );
+    }
     final indramayuBlue = const Color(0xFF009FE3);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
-          'Pasar Ikan Indramayu',
+          widget.targetItemId == null ? 'Pasar Ikan Indramayu' : 'Produk Pasar',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
             color: Colors.white,
@@ -162,6 +264,17 @@ class _PasarScreenState extends State<_PasarScreenContent>
         backgroundColor: indramayuBlue,
         elevation: 0,
         actions: [
+          ContentSearchAction(api: _apiService),
+          IconButton(
+            icon: const Icon(Icons.receipt_long, color: Colors.white),
+            tooltip: 'Riwayat pre-order',
+            onPressed: () => _openPreOrder(),
+          ),
+          IconButton(
+            tooltip: 'Riwayat eceran',
+            icon: const Icon(Icons.shopping_bag_outlined),
+            onPressed: () => _openRetail(),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             tooltip: 'Muat ulang Pasar',
@@ -231,6 +344,10 @@ class _PasarScreenState extends State<_PasarScreenContent>
                 List<dynamic> pasarItems = _items
                     .where(
                       (item) =>
+                          (widget.targetItemId == null ||
+                              item['id'] == widget.targetItemId) &&
+                          (widget.targetOwnerId == null ||
+                              item['user_id'] == widget.targetOwnerId) &&
                           (_category == null ||
                               item['kategori'] == _category) &&
                           (_saleType == null ||
@@ -238,8 +355,12 @@ class _PasarScreenState extends State<_PasarScreenContent>
                     )
                     .toList();
                 if (pasarItems.isEmpty) {
-                  return const Center(
-                    child: Text('Belum ada jualan yang sesuai.'),
+                  return Center(
+                    child: Text(
+                      widget.targetItemId == null
+                          ? 'Belum ada jualan yang sesuai.'
+                          : 'Produk tidak tersedia atau sudah dihapus.',
+                    ),
                   );
                 }
 
@@ -305,7 +426,7 @@ class _PasarScreenState extends State<_PasarScreenContent>
               child: const Text(
                 "Hapus",
                 style: TextStyle(
-                  color: Colors.red,
+                  color: SamuderaColors.orange,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -341,8 +462,6 @@ class _PasarScreenState extends State<_PasarScreenContent>
     String deskripsi =
         item['deskripsi'] ?? 'Tidak ada keterangan spesifikasi/minimal order.';
 
-    const String fotoProfilUserUrl = '';
-
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -375,11 +494,11 @@ class _PasarScreenState extends State<_PasarScreenContent>
                 : Container(
                     height: 180,
                     width: double.infinity,
-                    color: Colors.blue[50],
+                    color: SamuderaColors.blue,
                     child: const Icon(
                       Icons.image,
                       size: 50,
-                      color: Colors.blue,
+                      color: SamuderaColors.blue,
                     ),
                   ),
           ),
@@ -435,7 +554,7 @@ class _PasarScreenState extends State<_PasarScreenContent>
                               value: 'delete',
                               child: Text(
                                 "Hapus Jualan",
-                                style: TextStyle(color: Colors.red),
+                                style: TextStyle(color: SamuderaColors.orange),
                               ),
                             ),
                           ],
@@ -451,52 +570,17 @@ class _PasarScreenState extends State<_PasarScreenContent>
                 Row(
                   children: [
                     Flexible(
-                      child: GestureDetector(
-                        onTap: null,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            fotoProfilUserUrl.isNotEmpty
-                                ? ClipOval(
-                                    child: Image.network(
-                                      fotoProfilUserUrl,
-                                      width: 20,
-                                      height: 20,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (c, e, s) => const Icon(
-                                        Icons.person,
-                                        size: 16,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.person,
-                                    size: 16,
-                                    color: Colors.grey,
-                                  ),
-
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                penjual,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.poppins(
-                                  color: const Color(0xFF009FE3),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                      child: ProfileIdentity(
+                        api: _apiService,
+                        profile: item['profile'],
+                        fallbackName: penjual,
                       ),
                     ),
                     const SizedBox(width: 16),
                     const Icon(
                       Icons.location_on,
                       size: 16,
-                      color: Colors.redAccent,
+                      color: SamuderaColors.orange,
                     ),
                     const SizedBox(width: 4),
                     Flexible(
@@ -517,9 +601,11 @@ class _PasarScreenState extends State<_PasarScreenContent>
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: SamuderaColors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    border: Border.all(
+                      color: SamuderaColors.orange.withOpacity(0.3),
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -527,7 +613,7 @@ class _PasarScreenState extends State<_PasarScreenContent>
                       const Icon(
                         Icons.info_outline,
                         size: 16,
-                        color: Colors.orange,
+                        color: SamuderaColors.orange,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -544,6 +630,31 @@ class _PasarScreenState extends State<_PasarScreenContent>
                 ),
 
                 const Divider(height: 24),
+
+                if (item['tipe_penjualan'] == 'grosir')
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () =>
+                          _openPreOrder(productId: item['id'] as int),
+                      child: const Text('Ajukan pre-order'),
+                    ),
+                  ),
+                if (item['tipe_penjualan'] == 'eceran')
+                  TextButton(
+                    onPressed:
+                        ownsPasar(item, currentUserId) ||
+                            (item['satuan_jual'] != null && item['harga'] > 0)
+                        ? () => _openRetail(Map<String, dynamic>.from(item))
+                        : null,
+                    child: Text(
+                      ownsPasar(item, currentUserId)
+                          ? 'Atur harga dan satuan'
+                          : item['satuan_jual'] == null
+                          ? 'Satuan belum ditetapkan penjual'
+                          : 'Pesan eceran (${item['satuan_jual']})',
+                    ),
+                  ),
 
                 SizedBox(
                   width: double.infinity,
@@ -562,7 +673,7 @@ class _PasarScreenState extends State<_PasarScreenContent>
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF25D366),
+                      backgroundColor: const Color(0xFF8CC63F),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),

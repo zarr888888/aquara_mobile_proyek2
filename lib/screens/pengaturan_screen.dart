@@ -1,3 +1,4 @@
+import '../widgets/samudera_theme.dart';
 import '../widgets/session_boundary.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,6 +9,7 @@ import 'otp_screen.dart';
 import 'bantuan_screen.dart';
 import 'syarat_ketentuan_screen.dart';
 import 'tentang_aquara_screen.dart';
+import '../widgets/app_version_label.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 class PengaturanScreen extends StatelessWidget {
@@ -89,7 +91,7 @@ class _PengaturanScreenState extends State<_PengaturanScreenContent>
             _buildListTile(
               Icons.delete_outline,
               "Hapus Akun",
-              color: Colors.red,
+              color: SamuderaColors.orange,
               onTap: () {
                 showDialog(
                   context: context,
@@ -98,7 +100,7 @@ class _PengaturanScreenState extends State<_PengaturanScreenContent>
                       "Hapus Akun Permanen?",
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.bold,
-                        color: Colors.red,
+                        color: SamuderaColors.orange,
                       ),
                     ),
                     content: Text(
@@ -121,7 +123,7 @@ class _PengaturanScreenState extends State<_PengaturanScreenContent>
                         child: const Text(
                           "Ya, Hapus",
                           style: TextStyle(
-                            color: Colors.red,
+                            color: SamuderaColors.orange,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -155,7 +157,7 @@ class _PengaturanScreenState extends State<_PengaturanScreenContent>
                     content: Text(
                       "Fitur Dark Mode sedang dalam pengembangan untuk versi berikutnya!",
                     ),
-                    backgroundColor: Colors.orange,
+                    backgroundColor: SamuderaColors.orange,
                   ),
                 );
               },
@@ -186,14 +188,14 @@ class _PengaturanScreenState extends State<_PengaturanScreenContent>
                         content: Text(
                           "Anda akan menerima notifikasi Info Pasar.",
                         ),
-                        backgroundColor: Colors.green,
+                        backgroundColor: SamuderaColors.green,
                       ),
                     );
                   } catch (e) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text("Gagal mengaktifkan notifikasi."),
-                        backgroundColor: Colors.red,
+                        backgroundColor: SamuderaColors.orange,
                       ),
                     );
                     setState(() => _isNotifOn = false);
@@ -207,7 +209,7 @@ class _PengaturanScreenState extends State<_PengaturanScreenContent>
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text("Notifikasi Info Pasar dimatikan."),
-                        backgroundColor: Colors.orange,
+                        backgroundColor: SamuderaColors.orange,
                       ),
                     );
                   } catch (e) {
@@ -251,7 +253,7 @@ class _PengaturanScreenState extends State<_PengaturanScreenContent>
             _buildDivider(),
             _buildListTile(
               Icons.info_outline,
-              "Tentang AQUARA",
+              "Tentang SAMUDERA",
               onTap: () {
                 Navigator.push(
                   context,
@@ -265,10 +267,16 @@ class _PengaturanScreenState extends State<_PengaturanScreenContent>
 
           const SizedBox(height: 30),
           Center(
-            child: Text(
-              "AQUARA Versi 1.0.0\nDiskanla Indramayu",
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+            child: Column(
+              children: [
+                Text(
+                  'SAMUDERA',
+                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+                ),
+                AppVersionLabel(
+                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+                ),
+              ],
             ),
           ),
         ],

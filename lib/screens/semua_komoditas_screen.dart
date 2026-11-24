@@ -1,3 +1,4 @@
+import '../widgets/commodity_card.dart';
 import '../widgets/reference_list_builder.dart';
 import '../services/api_result.dart';
 import '../services/session_service.dart';
@@ -132,6 +133,7 @@ class _SemuaKomoditasScreenState extends State<_SemuaKomoditasScreenContent>
                     context,
                     MaterialPageRoute(
                       builder: (context) => AnalysisScreen(
+                        api: _apiService,
                         autoFishName: nama,
                         autoPrice: harga.toString(),
                         autoFcr: fcr,
@@ -140,106 +142,23 @@ class _SemuaKomoditasScreenState extends State<_SemuaKomoditasScreenContent>
                     ),
                   );
                 },
-                child: _buildCommodityCard(
-                  nama,
-                  "FCR $fcr • Panen $panen Hari",
-                  formatRupiah(harga),
-                  indramayuBlue,
-                  imageUrl,
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                    bottom: 12,
+                    left: 24,
+                    right: 24,
+                  ),
+                  child: CommodityCard(
+                    name: nama,
+                    specs: "FCR $fcr • Panen $panen Hari",
+                    price: formatRupiah(harga),
+                    imageUrl: imageUrl,
+                  ),
                 ),
               );
             },
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildCommodityCard(
-    String name,
-    String specs,
-    String price,
-    Color accentColor,
-    String? imageUrl,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12, left: 24, right: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF009FE3).withOpacity(0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            height: 54,
-            width: 54,
-            decoration: BoxDecoration(
-              color: accentColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: imageUrl != null && imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (ctx, err, stack) =>
-                          Icon(Icons.water_drop, color: accentColor),
-                    )
-                  : Icon(Icons.water_drop, color: accentColor),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: GoogleFonts.poppins(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  specs,
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: Colors.grey[500],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                "Harga Pasar",
-                style: GoogleFonts.poppins(fontSize: 9, color: Colors.grey),
-              ),
-              Text(
-                price,
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: accentColor,
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

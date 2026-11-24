@@ -1,3 +1,4 @@
+import '../widgets/samudera_theme.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -8,6 +9,9 @@ import '../services/api_result.dart';
 import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../widgets/session_boundary.dart';
+import '../widgets/profile_identity.dart';
+import 'forum_comments_screen.dart';
+import '../widgets/home_services.dart';
 
 class ForumScreen extends StatelessWidget {
   const ForumScreen({super.key, this.api, this.mine = false, this.clock});
@@ -48,7 +52,7 @@ class _ForumScreenState extends State<_ForumScreenContent>
   final _updates = ValueNotifier<int>(0);
   final _draft = TextEditingController();
   File? _image;
-  Future<bool>? _readFlight;
+  int _page = 0, _lastPage = 1, _readGeneration = 0;
   DateTime _now() => (widget.clock ?? DateTime.now)();
   bool get _active =>
       sessionActive && _owner != null && stateSession.owns(_owner!);
@@ -140,24 +144,35 @@ class _ForumScreenState extends State<_ForumScreenContent>
   }
 
   Future<bool> _refresh({bool afterMutation = false}) {
-    if (_readFlight != null) return _readFlight!;
     if (!_active || _remaining > 0) return Future.value(false);
-    final flight = _read(afterMutation);
-    _readFlight = flight;
-    return flight.whenComplete(() => _readFlight = null);
+    return _read(afterMutation);
   }
 
-  Future<bool> _read(bool afterMutation) async {
+  Future<bool> _read(bool afterMutation, {bool more = false}) async {
+    if (!_active ||
+        _remaining > 0 ||
+        (more && (_loading || _page >= _lastPage))) {
+      return false;
+    }
+    final generation = ++_readGeneration;
     _loading = true;
     _paint();
-    final result = await _api.fetchForumPosts(
+    final result = await _api.fetchForumPage(
       expectedSession: _owner!,
       mine: widget.mine,
+      page: more ? _page + 1 : 1,
     );
-    if (!_active) return false;
+    if (!_active || generation != _readGeneration) return false;
     _loading = false;
     if (result.isSuccess) {
-      _posts = List.of(result.data!);
+      final data = result.data!;
+      _posts = <int, Map<String, dynamic>>{
+        if (more)
+          for (final p in _posts) p['id'] as int: p,
+        for (final p in data.items) p['id'] as int: p,
+      }.values.toList();
+      _page = data.currentPage;
+      _lastPage = data.lastPage;
       _uncertain = false;
       _message = afterMutation ? 'Aksi berhasil. Daftar diperbarui.' : null;
     } else {
@@ -233,6 +248,15 @@ class _ForumScreenState extends State<_ForumScreenContent>
     if (!_active || _busy || (!comments && post != null && !_owns(post))) {
       return;
     }
+    if (comments) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ForumCommentsScreen(api: _api, postId: post!['id']),
+        ),
+      );
+      if (_active) await _refresh();
+      return;
+    }
     _draft.text = comments ? '' : post?['content'] ?? '';
     _image = null;
     await showModalBottomSheet<void>(
@@ -279,8 +303,11 @@ class _ForumScreenState extends State<_ForumScreenContent>
                         const Text('Belum ada komentar.'),
                       for (final c in current['comments'])
                         ListTile(
-                          leading: _avatar(c['avatar']),
-                          title: Text(c['author_name']),
+                          title: ProfileIdentity(
+                            api: _api,
+                            profile: c['profile'],
+                            fallbackName: c['author_name'],
+                          ),
                           subtitle: Text(c['content']),
                           trailing: _owns(c)
                               ? IconButton(
@@ -429,11 +456,6 @@ class _ForumScreenState extends State<_ForumScreenContent>
       ],
     ),
   );
-  Widget _avatar(String? url) => CircleAvatar(
-    child: url == null
-        ? const Icon(Icons.person)
-        : ClipOval(child: _photo(url, height: 40)),
-  );
   Widget _photo(String url, {double? height}) => Image.network(
     url,
     height: height,
@@ -459,6 +481,7 @@ class _ForumScreenState extends State<_ForumScreenContent>
       backgroundColor: const Color(0xFF009FE3),
       foregroundColor: Colors.white,
       actions: [
+        ContentSearchAction(api: _api),
         IconButton(
           tooltip: 'Muat ulang',
           onPressed: _loading || _busy || _remaining > 0
@@ -490,8 +513,16 @@ class _ForumScreenState extends State<_ForumScreenContent>
                 )
               : ListView.builder(
                   padding: const EdgeInsets.only(top: 10, bottom: 88),
-                  itemCount: _posts.length,
+                  itemCount: _posts.length + (_page < _lastPage ? 1 : 0),
                   itemBuilder: (context, index) {
+                    if (index == _posts.length) {
+                      return TextButton(
+                        onPressed: _loading || _busy || _remaining > 0
+                            ? null
+                            : () => _read(false, more: true),
+                        child: const Text('Muat posting berikutnya'),
+                      );
+                    }
                     final post = _posts[index] as Map<String, dynamic>;
                     return Card(
                       key: ValueKey('forum-${post['id']}'),
@@ -500,12 +531,10 @@ class _ForumScreenState extends State<_ForumScreenContent>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           ListTile(
-                            leading: _avatar(post['avatar']),
-                            title: Text(
-                              post['author_name'],
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.bold,
-                              ),
+                            title: ProfileIdentity(
+                              api: _api,
+                              profile: post['profile'],
+                              fallbackName: post['author_name'],
                             ),
                             subtitle: Text(_date(post['created_at'])),
                             trailing: _owns(post)
@@ -558,7 +587,7 @@ class _ForumScreenState extends State<_ForumScreenContent>
                                       ? Icons.favorite
                                       : Icons.favorite_border,
                                   color: post['is_liked_by_me']
-                                      ? Colors.red
+                                      ? SamuderaColors.orange
                                       : null,
                                 ),
                               ),

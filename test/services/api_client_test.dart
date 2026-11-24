@@ -35,6 +35,25 @@ void main() {
   });
   tearDown(() => session.dispose());
 
+  test('HTTP demo dibatasi ke base persis dan build opt-in', () {
+    const demo = 'http://127.0.0.1:18746/api';
+    const enabled =
+        bool.fromEnvironment('SAMUDERA_SOS_DEMO') &&
+        String.fromEnvironment('SAMUDERA_API_URL') == demo;
+    ApiClient create(String url) => ApiClient(baseUrl: Uri.parse(url));
+    expect(() => create(demo), enabled ? returnsNormally : throwsArgumentError);
+    for (final url in [
+      'http://localhost:18746/api',
+      'http://127.0.0.1:18747/api',
+      '$demo/other',
+      '$demo?q=1',
+      '$demo#fragment',
+      'http://user@127.0.0.1:18746/api',
+    ]) {
+      expect(() => create(url), throwsArgumentError);
+    }
+  });
+
   ApiClient client(Future<http.Response> Function(http.Request) handler) =>
       ApiClient(
         baseUrl: base,

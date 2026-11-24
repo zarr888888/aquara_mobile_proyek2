@@ -1,3 +1,4 @@
+import '../widgets/samudera_theme.dart';
 import '../widgets/session_boundary.dart';
 import 'dart:io';
 import '../widgets/profile_cooldown_state.dart';
@@ -153,7 +154,7 @@ class _EditProfilScreenState extends State<_EditProfilScreenContent>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Profil Berhasil Diperbarui!"),
-          backgroundColor: Colors.green,
+          backgroundColor: SamuderaColors.green,
         ),
       );
       Navigator.pop(context, true);
@@ -166,7 +167,10 @@ class _EditProfilScreenState extends State<_EditProfilScreenContent>
           result.failure!.kind == ApiErrorKind.network;
       recordProfileFailure(result.failure!);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(message),
+          backgroundColor: SamuderaColors.orange,
+        ),
       );
     }
   }
@@ -176,177 +180,198 @@ class _EditProfilScreenState extends State<_EditProfilScreenContent>
     final indramayuBlue = const Color(0xFF009FE3);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           "Edit Profil",
           style: GoogleFonts.poppins(
-            color: Colors.black87,
+            color: Theme.of(context).colorScheme.onSurface,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
+        iconTheme: IconThemeData(
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              Center(
-                child: Stack(
-                  alignment: Alignment.bottomRight,
-                  children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundColor: indramayuBlue.withOpacity(0.1),
-                      child: _imageFile != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(60),
-                              child: Image.file(
-                                _imageFile!,
-                                width: 120,
-                                height: 120,
-                                fit: BoxFit.cover,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                Center(
+                  child: Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      CircleAvatar(
+                        radius: 60,
+                        backgroundColor: indramayuBlue.withOpacity(0.1),
+                        child: _imageFile != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(60),
+                                child: Image.file(
+                                  _imageFile!,
+                                  width: 120,
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : Icon(
+                                Icons.person,
+                                size: 70,
+                                color: indramayuBlue,
                               ),
-                            )
-                          : Icon(Icons.person, size: 70, color: indramayuBlue),
-                    ),
-                    GestureDetector(
-                      onTap: _pilihFoto,
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF8CC63F),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 20,
-                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              TextFormField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: "Nama Lengkap / Nama Usaha",
-                  prefixIcon: Icon(Icons.person_outline, color: indramayuBlue),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(color: indramayuBlue, width: 2),
-                  ),
-                ),
-                validator: (value) =>
-                    value!.isEmpty ? 'Nama tidak boleh kosong' : null,
-              ),
-              const SizedBox(height: 20),
-
-              TextFormField(
-                controller: _fokusController,
-                maxLines: 2,
-                decoration: InputDecoration(
-                  labelText: "Fokus Budidaya (Contoh: Gurame, Nila)",
-                  prefixIcon: Icon(Icons.set_meal, color: indramayuBlue),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(color: indramayuBlue, width: 2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-              if (_message != null) Text(_message!),
-              for (final field in ['name', 'fokus_budidaya', 'foto_profil'])
-                if (_errors.containsKey(field))
-                  Text('$field: ${_errors[field]!.join(' ')}'),
-              if (_waiting) Text(profileWaitMessage),
-              if (_uncertain) ...[
-                const Text(
-                  'Hasil pengiriman belum diketahui. Muat ulang profil sebelum mengirim ulang.',
-                ),
-                TextButton(
-                  onPressed: _isLoading || _waiting
-                      ? null
-                      : () async {
-                          if (_isLoading || _waiting || !sessionActive) return;
-                          setState(() => _isLoading = true);
-                          final owner = await stateSession.snapshot();
-                          if (!mounted ||
-                              !sessionActive ||
-                              !stateSession.owns(owner)) {
-                            return;
-                          }
-                          final result = await _apiService.currentUser(
-                            expectedSession: owner,
-                          );
-                          if (!mounted ||
-                              !sessionActive ||
-                              !stateSession.owns(owner)) {
-                            return;
-                          }
-                          setState(() {
-                            _isLoading = false;
-                            if (!result.isSuccess) {
-                              recordProfileFailure(result.failure!);
-                            }
-                            if (result.isSuccess) {
-                              final data = result.data as Map;
-                              _nameController.text = data['name'];
-                              _fokusController.text =
-                                  data['fokus_budidaya'] ?? '';
-                              _imageFile = null;
-                              _uncertain = false;
-                            }
-                          });
-                          if (!result.isSuccess && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(result.failure!.message)),
-                            );
-                          }
-                        },
-                  child: const Text('Muat ulang profil'),
-                ),
-              ],
-
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton(
-                  onPressed: _isLoading || _waiting || _uncertain || _picking
-                      ? null
-                      : _simpanProfil,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: indramayuBlue,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          "SIMPAN PERUBAHAN",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                      GestureDetector(
+                        onTap: _pilihFoto,
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF8CC63F),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
                             color: Colors.white,
+                            size: 20,
                           ),
                         ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 30),
+
+                TextFormField(
+                  controller: _nameController,
+                  decoration: InputDecoration(
+                    labelText: "Nama Lengkap / Nama Usaha",
+                    prefixIcon: Icon(
+                      Icons.person_outline,
+                      color: indramayuBlue,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(color: indramayuBlue, width: 2),
+                    ),
+                  ),
+                  validator: (value) =>
+                      value!.isEmpty ? 'Nama tidak boleh kosong' : null,
+                ),
+                const SizedBox(height: 20),
+
+                TextFormField(
+                  controller: _fokusController,
+                  maxLines: 2,
+                  validator: (value) => (value ?? '').runes.length > 255
+                      ? 'Maksimal 255 karakter.'
+                      : null,
+                  decoration: InputDecoration(
+                    labelText: "Fokus Usaha",
+                    helperText:
+                        'Maksimal 255 karakter. Kosong mempertahankan fokus tersimpan.',
+                    helperMaxLines: 4,
+                    prefixIcon: Icon(Icons.set_meal, color: indramayuBlue),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(color: indramayuBlue, width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 40),
+                if (_message != null) Text(_message!),
+                for (final field in ['name', 'fokus_budidaya', 'foto_profil'])
+                  if (_errors.containsKey(field))
+                    Text('$field: ${_errors[field]!.join(' ')}'),
+                if (_waiting) Text(profileWaitMessage),
+                if (_uncertain) ...[
+                  const Text(
+                    'Hasil pengiriman belum diketahui. Muat ulang profil sebelum mengirim ulang.',
+                  ),
+                  TextButton(
+                    onPressed: _isLoading || _waiting
+                        ? null
+                        : () async {
+                            if (_isLoading || _waiting || !sessionActive) {
+                              return;
+                            }
+                            setState(() => _isLoading = true);
+                            final owner = await stateSession.snapshot();
+                            if (!mounted ||
+                                !sessionActive ||
+                                !stateSession.owns(owner)) {
+                              return;
+                            }
+                            final result = await _apiService.currentUser(
+                              expectedSession: owner,
+                            );
+                            if (!mounted ||
+                                !sessionActive ||
+                                !stateSession.owns(owner)) {
+                              return;
+                            }
+                            setState(() {
+                              _isLoading = false;
+                              if (!result.isSuccess) {
+                                recordProfileFailure(result.failure!);
+                              }
+                              if (result.isSuccess) {
+                                final data = result.data as Map;
+                                _nameController.text = data['name'];
+                                _fokusController.text =
+                                    data['fokus_budidaya'] ?? '';
+                                _imageFile = null;
+                                _uncertain = false;
+                              }
+                            });
+                            if (!result.isSuccess && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(result.failure!.message),
+                                ),
+                              );
+                            }
+                          },
+                    child: const Text('Muat ulang profil'),
+                  ),
+                ],
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: _isLoading || _waiting || _uncertain || _picking
+                        ? null
+                        : _simpanProfil,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: indramayuBlue,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(
+                            "SIMPAN PERUBAHAN",
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

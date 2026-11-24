@@ -43,6 +43,34 @@ void main() {
   }
 
   setUp(initialize);
+  test(
+    'focus 255 accepted, 256 rejected; blank retains server focus',
+    () async {
+      handler = (r) async {
+        final body = jsonDecode(r.body) as Map;
+        return http.Response(
+          jsonEncode({
+            'success': true,
+            'data': {
+              'id': 1,
+              'name': 'A',
+              'fokus_budidaya': body['fokus_budidaya'] ?? 'Lele',
+            },
+          }),
+          200,
+        );
+      };
+      expect((await api.updateProfile('A', 'a' * 255, null)).isSuccess, true);
+      expect(
+        (await api.updateProfile('A', 'a' * 256, null)).failure!.kind,
+        ApiErrorKind.validation,
+      );
+      expect(requests.length, 1);
+      final result = await api.updateProfile('A', '   ', null);
+      expect((result.data as Map)['data']['fokus_budidaya'], 'Lele');
+      expect(jsonDecode(requests.last.body), {'name': 'A'});
+    },
+  );
 
   test('own user direct object, headers, no query or body', () async {
     expect((await api.currentUser()).isSuccess, true);
@@ -175,11 +203,14 @@ void main() {
   ) async {
     await initialize();
     handler = (r) async => r.url.path.endsWith('pasars')
-        ? http.Response('{"success":true,"data":[]}', 200)
+        ? http.Response(
+            '{"success":true,"data":[],"meta":{"current_page":1,"last_page":1,"per_page":20,"total":0}}',
+            200,
+          )
         : user('A');
     await tester.pumpWidget(MaterialApp(home: ProfilScreen(api: api)));
     await tester.pumpAndSettle();
-    expect(find.text('Belum ada stok ikan.'), findsOneWidget);
+    expect(find.text('Belum ada stok panen.'), findsOneWidget);
     final owner = await session.snapshot();
     await session.updateMetadata(owner, {'id': 1, 'name': 'Updated'});
     await tester.pumpAndSettle();

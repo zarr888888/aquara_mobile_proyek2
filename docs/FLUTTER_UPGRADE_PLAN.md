@@ -4,7 +4,11 @@
 **Status:** Rencana integrasi; belum ada implementasi fitur/perubahan kode aplikasi.  
 **Prioritas:** amankan transport dan sesi → benahi Auth/OTP → migrasikan fitur lama → integrasikan fitur baru → uji regresi.
 
+> **Pembaruan posisi 25 Oktober 2026:** status dan checkbox audit 30 September di bawah adalah snapshot historis, bukan daftar pekerjaan yang harus diulang. Tahap 2 dilaporkan selesai dan fondasi ApiClient/SessionService/SessionBoundary tersedia; migrasi legacy, SOS, pre-order, Info Eksternal Mock serta pembaruan UI memiliki implementasi/catatan validasi lokal di C:/laragon/www/aquara_mobile/TODO.md. Langkah terarah berikutnya adalah **Tahap 7 Asisten Mock**, saat ini baru persiapan, belum implementasi Flutter. Lihat C:/laragon/www/aquara_mobile/docs/Asisten_SAMUDERA.md untuk kontrak source aktual, batas minimum dan gate penerimaan. Laporan emulator UI/profil/produk/komentar/autoplay/Jeda-Lanjut pengguna sudah dicatat terpisah dari hasil otomatis terakhir (682 test lulus, analyzer 41 diagnostic existing). Ini tidak menutup keamanan menyeluruh, scalability, UAT Dinas maupun Tahap 8/kesiapan rilis.
+
 ## 1. Acuan, ruang lingkup, dan batas audit
+
+Pembaruan terarah 27 Oktober 2026: Asisten sudah memiliki implementasi/validasi lokal pada TODO (catatan persiapan 25 Oktober di atas bersifat historis). PRD 8 kini diimplementasikan sebagai pusat panduan publik lokal, tanpa endpoint baru; lihat C:/laragon/www/aquara_mobile/docs/PERIZINAN_SAMUDERA.md. Ini bukan pengulangan Tahap 1–2 atau penutupan Tahap 8/rilis. Emulator dan review dinas tetap gate terpisah.
 
 - Kontrak integrasi utama: `c:\laragon\www\aquara_mobile\docs\API_DOCUMENTATION.md`, disusun backend pada 29 September 2026.
 - Target produk: `c:\laragon\www\aquara_mobile\PRD.md` versi 3.0.
@@ -167,7 +171,7 @@ Layar terdampak: `c:\laragon\www\aquara_mobile\lib\screens\login_screen.dart`, `
 
 ### 5.4 Asisten SAMUDERA — Chatbot Mock
 
-- Tambahkan tombol mengambang yang tidak menutupi navigasi/form dan layar `c:\laragon\www\aquara_mobile\lib\screens\asisten_samudera_screen.dart`; wajib login.
+- Scope disetujui 26 Oktober 2026: **satu tombol Asisten SAMUDERA di Beranda**, tanpa FAB global/perubahan navbar, menuju layar `c:\laragon\www\aquara_mobile\lib\screens\asisten_samudera_screen.dart`; wajib login. Menggantikan usulan tombol mengambang historis.
 - `POST /api/asisten/chat` hanya `message` string tidak kosong maksimal 2000; dilarang menyertakan `user_id/response/reply/jawaban/pertanyaan`, termasuk null.
 - Normalisasikan model UI: respons POST 201 memakai `message/reply/is_mock`; GET riwayat/detail memakai `pertanyaan/jawaban` dan tidak menambahkan `is_mock`.
 - Riwayat `GET /api/asisten/chat?page=N`: `data.data`, 20 item, terbaru dahulu; detail `/api/asisten/chat/{id}` milik sendiri. Atur urutan bubble secara eksplisit dan deduplikasi pesan yang baru dikirim dengan riwayat.
@@ -202,7 +206,7 @@ Semua checkbox berikut adalah pekerjaan mendatang, bukan implementasi yang sudah
 | 4 | [ ] SOS: form, riwayat, detail | Membutuhkan tahap 1–3; upload, isolasi pemilik, dan status baca teruji |
 | 5 | [ ] Bursa Grosir + riwayat/detail pre-order | Membutuhkan field pasar tahap 3; presisi/tanggal/pagination/peserta teruji |
 | 6 | [ ] Info Eksternal Mock | Dapat paralel dengan 4–5 setelah transport siap; guest dan label simulasi teruji |
-| 7 | [ ] Asisten Mock | Sesi stabil; kedua schema chat, pagination, no-store dan kuota bersama teruji |
+| 7 | [x] Asisten Mock — implementasi dan validasi lokal 26 Oktober 2026 | Kedua schema, pagination, memori sesi dan cooldown bersama teruji fake; 134 test terarah/744 suite penuh PASS. Integrasi deployment, emulator, retensi dan UAT tetap terbuka; lihat Asisten_SAMUDERA.md/TODO terbaru |
 | 8 | [ ] Rebranding final, aksesibilitas, regresi lintas akun/perangkat, UAT Dinas | Tidak ada klaim layanan resmi/realtime yang belum tersedia; temuan rilis diselesaikan |
 
 Setiap tahap dibuat sebagai perubahan kecil yang dapat direview/dirollback; jangan mencampur refactor state management atau upgrade massal dependency. Perubahan native hanya setelah permintaan eksplisit sesuai aturan workspace.

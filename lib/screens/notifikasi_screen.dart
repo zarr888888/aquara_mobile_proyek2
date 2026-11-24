@@ -1,3 +1,4 @@
+import '../widgets/samudera_theme.dart';
 import '../widgets/session_boundary.dart';
 import 'dart:async';
 import '../models/app_notification.dart';
@@ -177,10 +178,10 @@ class _NotifikasiScreenState extends State<_NotifikasiScreenContent>
   }
 
   Color _getColor(String type) {
-    if (type == 'pasar') return Colors.orange;
-    if (type == 'forum') return Colors.purple;
-    if (type == 'ai') return Colors.teal;
-    return Colors.blue;
+    if (type == 'pasar') return SamuderaColors.orange;
+    if (type == 'forum') return SamuderaColors.blue;
+    if (type == 'ai') return SamuderaColors.blue;
+    return SamuderaColors.blue;
   }
 
   @override
@@ -250,7 +251,7 @@ class _NotifikasiScreenState extends State<_NotifikasiScreenContent>
                         decoration: BoxDecoration(
                           color: n.isRead
                               ? Colors.white
-                              : Colors.blue.shade50.withValues(alpha: 0.5),
+                              : SamuderaColors.blue.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: Colors.grey.shade100),
                         ),

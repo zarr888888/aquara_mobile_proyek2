@@ -15,6 +15,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/fake_token_store.dart';
+import 'package:aquara_mobile/models/forum_post.dart';
 
 Map<String, Object?> item({
   Object? read = false,
@@ -40,10 +41,15 @@ class DestinationFakeApi extends ApiService {
     required SessionSnapshot expectedSession,
   }) async => const ApiResult.success(data: [], statusCode: 200);
   @override
-  Future<ApiResult<List<dynamic>>> fetchForumPosts({
+  Future<ApiResult<ForumPage>> fetchForumPage({
     required SessionSnapshot expectedSession,
     bool mine = false,
-  }) async => const ApiResult.success(data: [], statusCode: 200);
+    int page = 1,
+    int perPage = 20,
+    int? postId,
+    int? parentId,
+  }) async =>
+      const ApiResult.success(data: ForumPage([], 1, 1, 0), statusCode: 200);
 }
 
 void main() {

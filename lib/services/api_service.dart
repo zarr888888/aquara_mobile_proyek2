@@ -1,8 +1,12 @@
 import '../models/reference_data.dart';
 import 'forum_api.dart';
 import 'pasar_api.dart';
+import 'profile_api.dart';
 import 'ai_analysis_api.dart';
 import 'sos_api.dart';
+import 'pre_order_api.dart';
+import 'external_info_api.dart';
+import 'asisten_api.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
@@ -13,13 +17,29 @@ import 'api_client.dart';
 import 'session_service.dart';
 import '../models/app_notification.dart';
 
+import 'retail_api.dart';
+
 class ApiService extends AuthService
-    with ForumApi, PasarApi, AiAnalysisApi, SosApi {
+    with
+        ForumApi,
+        PasarApi,
+        ProfileApi,
+        AiAnalysisApi,
+        SosApi,
+        PreOrderApi,
+        RetailApi,
+        ExternalInfoApi,
+        AsistenApi {
   ApiService({
     ApiClient? client,
     SessionService? session,
     Future<String?> Function()? googleIdToken,
-  }) : super(client: client, session: session, googleIdToken: googleIdToken);
+    ExternalInfoRequests? externalInfoRequests,
+  }) : externalInfoRequests =
+           externalInfoRequests ?? ExternalInfoRequests.shared,
+       super(client: client, session: session, googleIdToken: googleIdToken);
+  @override
+  final ExternalInfoRequests externalInfoRequests;
   final String baseUrl = AuthService.apiBaseUrl;
 
   Future<ApiResult<List<dynamic>>> fetchFishTypes({
@@ -157,6 +177,14 @@ class ApiService extends AuthService
     File? fotoProfil, {
     SessionSnapshot? expectedSession,
   }) async {
+    if (fokusBudidaya.runes.length > 255) {
+      return ApiResult.failure(
+        ApiFailure(
+          kind: ApiErrorKind.validation,
+          message: 'Fokus Usaha maksimal 255 karakter.',
+        ),
+      );
+    }
     try {
       final before = expectedSession ?? await session.snapshot();
       if (!session.owns(before)) return _staleProfile();

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:aquara_mobile/screens/home_screen.dart';
+import 'package:aquara_mobile/widgets/home_services.dart';
 import 'package:aquara_mobile/screens/login_screen.dart';
 import 'package:aquara_mobile/screens/sos_screen.dart';
 import 'package:aquara_mobile/services/api_client.dart';
@@ -169,6 +170,7 @@ void main() {
   }
 
   Future<void> enter(WidgetTester tester) async {
+    await tester.ensureVisible(find.text('SOS Bahari / Lapor Darurat'));
     await tester.tap(find.text('SOS Bahari / Lapor Darurat'));
     await tester.pumpAndSettle();
   }
@@ -179,17 +181,25 @@ void main() {
     ) async {
       await initialize(tester, guest: guest);
       await mount(tester, HomeScreen(api: api));
+      tester
+          .widget<InkWell>(find.byKey(const ValueKey('service-all')))
+          .onTap!();
+      await tester.pumpAndSettle();
+      expect(find.byType(ServiceCatalogScreen), findsOneWidget);
       for (final label in [
         'Analisa Usaha',
         'Harga Pasar',
         'Katalog Ikan',
-        'Forum',
+        'Forum Komunitas',
         'Konsultasi',
         'Info Dinas',
       ]) {
         expect(find.text(label), findsWidgets);
       }
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       final entry = find.text('SOS Bahari / Lapor Darurat');
+      await tester.ensureVisible(entry);
       final onTap = tester
           .widget<ListTile>(
             find.ancestor(of: entry, matching: find.byType(ListTile)),
@@ -200,7 +210,7 @@ void main() {
       onTap();
       onTap();
       await tester.pumpAndSettle();
-      expect(routes.pushed.length, guest ? 3 : 2); // Home, SOS, optional Login.
+      expect(routes.pushed.length, guest ? 4 : 3); // Home, SOS, optional Login.
       expect(find.byType(guest ? LoginScreen : SosScreen), findsOneWidget);
       expect(
         requests.where((r) => r.url.path.contains('lapor-darurat')),

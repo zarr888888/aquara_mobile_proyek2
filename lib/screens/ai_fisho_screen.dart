@@ -1,3 +1,4 @@
+import '../widgets/samudera_theme.dart';
 import '../widgets/session_boundary.dart';
 import 'dart:async';
 import '../services/ai_analysis_api.dart';
@@ -285,7 +286,7 @@ class _AiFishoScreenState extends State<_AiFishoScreenContent>
                     icon: const Icon(Icons.photo_library),
                     label: const Text("Galeri"),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
+                      backgroundColor: SamuderaColors.orange,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 15),
                     ),
@@ -300,7 +301,7 @@ class _AiFishoScreenState extends State<_AiFishoScreenContent>
                   ? null
                   : _analyzeImage,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: SamuderaColors.green,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 18),
                 shape: RoundedRectangleBorder(
@@ -354,7 +355,7 @@ class _AiFishoScreenState extends State<_AiFishoScreenContent>
                       children: [
                         const Icon(
                           Icons.check_circle,
-                          color: Colors.green,
+                          color: SamuderaColors.green,
                           size: 30,
                         ),
                         const SizedBox(width: 10),
@@ -378,7 +379,7 @@ class _AiFishoScreenState extends State<_AiFishoScreenContent>
                       "Solusi Penanganan:",
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.bold,
-                        color: Colors.red,
+                        color: SamuderaColors.orange,
                       ),
                     ),
                     const SizedBox(height: 5),

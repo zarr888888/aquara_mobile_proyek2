@@ -1,3 +1,4 @@
+import '../widgets/samudera_theme.dart';
 import '../widgets/session_boundary.dart';
 import '../widgets/pasar_operation_state.dart';
 import '../widgets/pasar_optional_fields.dart';
@@ -133,7 +134,7 @@ class _TambahJualanScreenState extends State<_TambahJualanScreenContent>
             "Berhasil memposting jualan!",
             style: TextStyle(color: Colors.white),
           ),
-          backgroundColor: Colors.green,
+          backgroundColor: SamuderaColors.green,
         ),
       );
       Navigator.pop(context, true);
@@ -154,7 +155,7 @@ class _TambahJualanScreenState extends State<_TambahJualanScreenContent>
             color: Colors.white,
           ),
         ),
-        backgroundColor: const Color(0xFF8CC63F),
+        backgroundColor: const Color(0xFF009FE3),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),

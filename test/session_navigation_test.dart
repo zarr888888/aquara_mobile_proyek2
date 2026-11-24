@@ -8,6 +8,7 @@ import 'package:aquara_mobile/services/api_client.dart';
 import 'package:aquara_mobile/services/api_service.dart';
 import 'package:aquara_mobile/services/session_service.dart';
 import 'package:aquara_mobile/widgets/session_boundary.dart';
+import 'package:aquara_mobile/widgets/home_news_preview.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -29,6 +30,51 @@ void main() {
     session = SessionService(store: FakeTokenStore());
     api = ApiService(session: session);
   }
+
+  testWidgets('guest news preview cannot replace successful login route', (
+    tester,
+  ) async {
+    initialize();
+    final key = GlobalKey<NavigatorState>();
+    final observer = _Observer();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: key,
+        navigatorObservers: [observer],
+        home: SessionBoundary(
+          api: api,
+          private: false,
+          builder: (_) => Scaffold(
+            body: HomeNewsPreview(api: api, openPage: (_) {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    key.currentState!.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Login route')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await session.saveIfCurrent('synthetic', user: {'id': 1, 'name': 'Buyer'});
+    key.currentState!.pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Authenticated home')),
+      ),
+      (_) => false,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      observer.pushes,
+      3,
+      reason:
+          'Guest home → login → authenticated home; unexpected LoginScreen: ${find.byType(LoginScreen).evaluate().length}',
+    );
+    expect(find.text('Authenticated home'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await session.dispose();
+  });
 
   testWidgets('parallel private 401 clears data and Back cannot restore A', (
     tester,

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.9.0
@@ -46,6 +46,10 @@ dependencies:
   firebase_messaging: ^16.2.0
   flutter_local_notifications: ^20.1.0
   flutter_secure_storage: ^10.3.4
+  package_info_plus: 8.3.1
+  flutter_map: 8.2.0
+  latlong2: 0.9.1
+  geolocator: 14.0.0
 
 dev_dependencies:
   flutter_test:
@@ -61,9 +65,12 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: true
-  image_path: "assets/logo2.png"
-  adaptive_icon_background: "#009FE3"
-  adaptive_icon_foreground: "assets/logo2.png"
+  ios: false
+  image_path: "assets/images/branding/SAMUDERA_FIX_LOGO.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/branding/SAMUDERA_FIX_LOGO.png"
+  # The original transparent canvas already provides the adaptive safe zone.
+  adaptive_icon_foreground_inset: 0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -78,7 +85,12 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/images/branding/SAMUDERA_FIX_LOGO.png
+    - assets/images/branding/gombyang.png
+    - assets/images/home/samudera_hero.jpg
+    - assets/images/discovery/
     - assets/icons/
+    - assets/icons/services/
     - assets/logo.jpeg
     - assets/banner_forum.png
     - assets/banner_hargapasar.png

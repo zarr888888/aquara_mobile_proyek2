@@ -1,3 +1,5 @@
+import '../widgets/samudera_theme.dart';
+import '../widgets/feature_tabs.dart';
 import '../widgets/reference_list_builder.dart';
 import '../services/api_result.dart';
 import '../services/session_service.dart';
@@ -149,12 +151,15 @@ class _CatalogScreenState extends State<_CatalogScreenContent>
               Container(
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
+                  color: SamuderaColors.orange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.monetization_on, color: Colors.orange),
+                    const Icon(
+                      Icons.monetization_on,
+                      color: SamuderaColors.orange,
+                    ),
                     const SizedBox(width: 15),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -175,7 +180,7 @@ class _CatalogScreenState extends State<_CatalogScreenContent>
                           style: GoogleFonts.poppins(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Colors.orange[800],
+                            color: SamuderaColors.orange,
                           ),
                         ),
                       ],
@@ -228,18 +233,9 @@ class _CatalogScreenState extends State<_CatalogScreenContent>
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        bottom: TabBar(
+        bottom: FeatureTabs(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          indicatorWeight: 3,
-          labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-          unselectedLabelStyle: GoogleFonts.poppins(
-            fontWeight: FontWeight.normal,
-          ),
-          tabs: const [
-            Tab(text: "Ensiklopedia"),
-            Tab(text: "Bursa Stok"),
-          ],
+          labels: const ['Ensiklopedia', 'Bursa Stok'],
         ),
       ),
       body: TabBarView(
@@ -404,7 +400,7 @@ class _CatalogScreenState extends State<_CatalogScreenContent>
                   ),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF25D366),
+                      backgroundColor: const Color(0xFF8CC63F),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 8,
@@ -538,13 +534,13 @@ class _CatalogScreenState extends State<_CatalogScreenContent>
                                       const Icon(
                                         Icons.inventory_2,
                                         size: 12,
-                                        color: Colors.orange,
+                                        color: SamuderaColors.orange,
                                       ),
                                       Text(
                                         " ${stock['amount_kg']} Kg",
                                         style: GoogleFonts.poppins(
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.orange,
+                                          color: SamuderaColors.orange,
                                           fontSize: 12,
                                         ),
                                       ),
@@ -577,12 +573,12 @@ class _CatalogScreenState extends State<_CatalogScreenContent>
                           child: Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
+                              color: SamuderaColors.green.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(50),
                             ),
                             child: const Icon(
                               Icons.phone,
-                              color: Colors.green,
+                              color: SamuderaColors.green,
                               size: 20,
                             ),
                           ),

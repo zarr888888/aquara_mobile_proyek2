@@ -70,6 +70,33 @@ void main() {
 
   setUp(initialize);
 
+  test('foto HTTP absolut khusus lokasi media gladi SOS', () {
+    String? parse(String url) =>
+        SosReport.parse({...report(), 'foto': url}).photo;
+    const root = 'http://127.0.0.1:18746/demo-media/';
+    const enabled =
+        bool.fromEnvironment('SAMUDERA_SOS_DEMO') &&
+        String.fromEnvironment('SAMUDERA_API_URL') ==
+            'http://127.0.0.1:18746/api';
+    const valid = '${root}reports/photo-01.jpg';
+    expect(parse(valid), enabled ? valid : isNull);
+    for (final invalid in [
+      '${root}../x',
+      '${root}%2e%2e/x',
+      '${root}a%2fb',
+      '${root}a?x=y',
+      '${root}a#f',
+      '${root}a\\b',
+      root,
+      'http://127.0.0.1:18746/api/x',
+      'http://localhost:18746/demo-media/a',
+      'http://127.0.0.1:18747/demo-media/a',
+      'http://u@127.0.0.1:18746/demo-media/a',
+    ]) {
+      expect(parse(invalid), isNull);
+    }
+  });
+
   void sosWidget(String name, Future<void> Function(WidgetTester) body) {
     testWidgets(name, (tester) async {
       await initialize();

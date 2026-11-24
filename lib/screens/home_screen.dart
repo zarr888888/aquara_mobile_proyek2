@@ -1,4 +1,6 @@
+import '../widgets/commodity_card.dart';
 import '../widgets/reference_list_builder.dart';
+import '../widgets/samudera_branding.dart';
 import '../services/api_result.dart';
 import '../widgets/session_boundary.dart';
 import '../services/session_service.dart';
@@ -14,6 +16,14 @@ import 'market_price_screen.dart';
 import 'info_dinas_screen.dart';
 import 'forum_screen.dart';
 import 'consultation_screen.dart';
+import 'ai_fisho_screen.dart';
+import 'pre_order_screen.dart';
+import 'icon_credits_screen.dart';
+import 'perizinan_screen.dart';
+import '../widgets/home_services.dart';
+import '../widgets/service_discovery.dart';
+import '../widgets/home_news_preview.dart';
+import '../widgets/support_banners.dart';
 import 'berita_screen.dart';
 import 'pasar_screen.dart';
 import 'login_screen.dart';
@@ -21,22 +31,30 @@ import 'profil_screen.dart';
 import 'semua_komoditas_screen.dart';
 import 'notifikasi_screen.dart';
 import 'sos_screen.dart';
+import 'external_info_screen.dart';
+import 'asisten_samudera_screen.dart';
+import '../widgets/gombyang.dart';
+import '../models/external_info.dart';
+import 'package:image_picker/image_picker.dart';
+import '../services/sos_api.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, this.api});
+  const HomeScreen({super.key, this.api, this.pickSosPhoto});
   final ApiService? api;
+  final Future<XFile?> Function(ImageSource)? pickSosPhoto;
 
   @override
   Widget build(BuildContext context) => SessionBoundary(
     api: api,
     private: false,
-    builder: (_) => _HomeScreenContent(api: api),
+    builder: (_) => _HomeScreenContent(api: api, pickSosPhoto: pickSosPhoto),
   );
 }
 
 class _HomeScreenContent extends StatefulWidget {
-  const _HomeScreenContent({this.api});
+  const _HomeScreenContent({this.api, this.pickSosPhoto});
   final ApiService? api;
+  final Future<XFile?> Function(ImageSource)? pickSosPhoto;
 
   @override
   State<_HomeScreenContent> createState() => _HomeScreenState();
@@ -74,6 +92,7 @@ class _HomeScreenState extends State<_HomeScreenContent>
   late Future<ApiResult<List<dynamic>>> _fishList;
 
   int _selectedIndex = 0;
+  bool _supportPaused = false;
   bool _isLoggedIn = false;
   String _userName = "";
   String _fotoProfil = "";
@@ -82,21 +101,33 @@ class _HomeScreenState extends State<_HomeScreenContent>
     viewportFraction: 0.92,
   );
 
-  final List<String> _bannerImages = [
-    'assets/banner_analisausaha.png',
-    'assets/banner_hargapasar.png',
-    'assets/banner_forum.png',
-    'assets/banner konsultasi ai.png',
-  ];
-
   int _currentBannerIndex = 0;
 
-  Timer? _bannerTimer;
   StreamSubscription<int>? _metadataSubscription;
+  bool _discoveryOpen = false;
+  bool _routeOpen = false;
+  bool _catalogOpen = false;
+  final _searchFocus = FocusNode();
   bool _sosOpen = false;
+  bool _externalInfoOpen = false;
+
+  Future<void> _openExternalInfo(ExternalInfoKind kind) async {
+    if (!sessionActive || _externalInfoOpen || _routeOpen || _sosOpen) return;
+    _externalInfoOpen = true;
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => ExternalInfoScreen(kind: kind, api: _apiService),
+        ),
+      );
+    } finally {
+      if (mounted) _externalInfoOpen = false;
+    }
+  }
 
   Future<void> _openSos() async {
-    if (!sessionActive || _sosOpen) return;
+    if (!sessionActive || _sosOpen || _routeOpen || _externalInfoOpen) return;
     _sosOpen = true;
     try {
       await Navigator.push(
@@ -108,30 +139,102 @@ class _HomeScreenState extends State<_HomeScreenContent>
     }
   }
 
-  void _startAutoSlide() {
-    _bannerTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (_bannerController.hasClients) {
-        int nextPage = _currentBannerIndex + 1;
-
-        if (nextPage >= _bannerImages.length) {
-          nextPage = 0;
-        }
-
-        _bannerController.animateToPage(
-          nextPage,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
+  Future<void> _openSosCamera() async {
+    if (!sessionActive ||
+        _sosOpen ||
+        _routeOpen ||
+        _externalInfoOpen ||
+        _catalogOpen) {
+      return;
+    }
+    _sosOpen = true;
+    try {
+      final owner = await stateSession.snapshot();
+      if (!mounted ||
+          !sessionActive ||
+          owner.revision != stateSession.revision) {
+        return;
+      }
+      if (!owner.isAuthenticated) {
+        SessionNavigation.leave(context);
+        return;
+      }
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Foto SOS — belum mengirim laporan'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Ambil Foto'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Pilih dari Galeri'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (!sessionActive || !stateSession.owns(owner) || source == null) return;
+      final file =
+          await (widget.pickSosPhoto?.call(source) ??
+              ImagePicker().pickImage(source: source));
+      if (!sessionActive || !stateSession.owns(owner) || file == null) return;
+      final photo = await SosPhoto.read(file);
+      if (!mounted || !sessionActive || !stateSession.owns(owner)) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => SosScreen(
+            api: _apiService,
+            initialPhoto: photo,
+            photoOwner: owner,
+            pickPhoto: widget.pickSosPhoto,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted && sessionActive) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Foto tidak dapat dipilih. Periksa izin kamera/galeri dan gunakan JPEG/PNG maksimal 2048 KB.',
+            ),
+          ),
         );
       }
-    });
+    } finally {
+      if (sessionActive) _sosOpen = false;
+    }
   }
 
-  final List<String> _bannerTitles = [
-    "Analisa Panen Cerdas",
-    "Cek Harga & Stok Pasar Hari Ini",
-    "Diskusi Bersama Komunitas",
-    "Foto Ikan dan AI Menjawabnya",
-  ];
+  Future<void> _openDiscovery(Widget page) async {
+    if (!sessionActive ||
+        _discoveryOpen ||
+        _routeOpen ||
+        _catalogOpen ||
+        _sosOpen ||
+        _externalInfoOpen) {
+      return;
+    }
+    _discoveryOpen = true;
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(builder: (_) => page),
+      );
+    } finally {
+      if (mounted) _discoveryOpen = false;
+    }
+  }
 
   @override
   void initState() {
@@ -141,14 +244,13 @@ class _HomeScreenState extends State<_HomeScreenContent>
     _metadataSubscription = _apiService.session.changes.listen((_) {
       if (sessionActive) _checkLoginStatus();
     });
-    _startAutoSlide();
   }
 
   @override
   void dispose() {
-    _bannerTimer?.cancel();
     _metadataSubscription?.cancel();
     _bannerController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -176,631 +278,639 @@ class _HomeScreenState extends State<_HomeScreenContent>
     }
   }
 
-  Widget _buildBeranda(Color indramayuBlue, Color indramayuGreen) {
+  Future<void> _openPage(Widget page) async {
+    if (!sessionActive || _routeOpen || _sosOpen || _externalInfoOpen) return;
+    _routeOpen = true;
+    FocusManager.instance.primaryFocus?.unfocus();
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(builder: (_) => page),
+      );
+    } finally {
+      if (mounted) _routeOpen = false;
+    }
+  }
+
+  List<HomeService> get _services {
+    HomeService item(
+      String id,
+      String label,
+      String asset,
+      ServiceGroup group,
+      int order,
+      Widget page, {
+      bool private = true,
+    }) => HomeService(
+      id: id,
+      label: label,
+      asset: 'assets/icons/services/$asset.png',
+      group: group,
+      order: order,
+      requiresSession: private,
+      onTap: () => _openPage(page),
+    );
+    return [
+      HomeService.perizinan(onTap: () => _openPage(const PerizinanScreen())),
+      item(
+        'analysis',
+        'Analisa Usaha',
+        'analisa_usaha',
+        ServiceGroup.primary,
+        0,
+        AnalysisScreen(api: _apiService),
+      ),
+      item(
+        'market',
+        'Pasar Ikan',
+        'pasar',
+        ServiceGroup.primary,
+        1,
+        PasarScreen(api: _apiService),
+      ),
+      item(
+        'fish',
+        'Katalog Ikan',
+        'katalog_ikan',
+        ServiceGroup.primary,
+        2,
+        CatalogScreen(api: _apiService),
+      ),
+      item(
+        'forum',
+        'Forum Komunitas',
+        'forum',
+        ServiceGroup.primary,
+        3,
+        ForumScreen(api: _apiService),
+      ),
+      for (final kind in ExternalInfoKind.values)
+        HomeService(
+          id: 'external-info-${kind.name}',
+          label: kind == ExternalInfoKind.cuaca ? 'Cuaca' : kind.label,
+          asset:
+              'assets/icons/services/${switch (kind) {
+                ExternalInfoKind.kkp => 'informasi',
+                ExternalInfoKind.cuaca => 'cuaca',
+                ExternalInfoKind.tpi => 'tpi',
+              }}.png',
+          group: ServiceGroup.secondary,
+          order: kind.index,
+          badge: null,
+          requiresSession: false,
+          onTap: () {
+            if (!_routeOpen) _openExternalInfo(kind);
+          },
+        ),
+      item(
+        'orders',
+        'Pesanan Grosir',
+        'pesanan',
+        ServiceGroup.secondary,
+        3,
+        PreOrderScreen(api: _apiService, view: PreOrderView.history),
+      ),
+      item(
+        'photo',
+        'Analisis Foto',
+        'analisis_foto',
+        ServiceGroup.secondary,
+        4,
+        AiFishoScreen(api: _apiService),
+      ),
+      item(
+        'my-forum',
+        'Forum Saya',
+        'forum_saya',
+        ServiceGroup.secondary,
+        5,
+        ForumScreen(api: _apiService, mine: true),
+      ),
+      item(
+        'news',
+        'Berita',
+        'berita',
+        ServiceGroup.secondary,
+        6,
+        BeritaScreen(api: _apiService),
+      ),
+      item(
+        'department',
+        'Info Dinas',
+        'info_dinas',
+        ServiceGroup.additional,
+        0,
+        InfoDinasScreen(api: _apiService),
+      ),
+      item(
+        'prices',
+        'Harga Pasar',
+        'harga_pasar',
+        ServiceGroup.additional,
+        1,
+        MarketPriceScreen(api: _apiService),
+      ),
+      item(
+        'consultation',
+        'Konsultasi',
+        'konsultasi',
+        ServiceGroup.additional,
+        2,
+        const ConsultationScreen(),
+        private: false,
+      ),
+      item(
+        'commodities',
+        'Semua Komoditas',
+        'semua_komoditas',
+        ServiceGroup.additional,
+        3,
+        SemuaKomoditasScreen(api: _apiService),
+      ),
+      HomeService(
+        id: 'sos',
+        label: 'SOS Bahari',
+        asset: 'assets/icons/services/sos.png',
+        group: ServiceGroup.emergency,
+        order: 0,
+        onTap: () {
+          if (!_routeOpen) _openSos();
+        },
+      ),
+    ];
+  }
+
+  Future<void> _openCatalog() async {
+    if (!sessionActive ||
+        _catalogOpen ||
+        _routeOpen ||
+        _sosOpen ||
+        _externalInfoOpen) {
+      return;
+    }
+    _catalogOpen = true;
+    FocusManager.instance.primaryFocus?.unfocus();
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => SessionBoundary(
+            api: _apiService,
+            private: false,
+            builder: (_) =>
+                ServiceCatalogScreen(services: _services, api: _apiService),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) _catalogOpen = false;
+    }
+  }
+
+  Widget _heading(String title) => Padding(
+    padding: const EdgeInsets.only(top: 24, bottom: 12),
+    child: Text(
+      title,
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+    ),
+  );
+
+  Widget _buildBeranda() {
     _userName = _apiService.session.metadata['user_name'] ?? 'Pembudidaya';
     _fotoProfil =
         referenceImage({
           'image': _apiService.session.metadata['foto_profil'],
         }) ??
         '';
+    final services = _services;
     return SafeArea(
+      top: false,
       child: SingleChildScrollView(
+        key: const Key('home-scroll'),
+        padding: const EdgeInsets.only(bottom: 88),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ListTile(
-              leading: const Icon(Icons.sos, color: Color(0xFF0079C3)),
-              title: const Text('SOS Bahari / Lapor Darurat'),
-              onTap: _openSos,
-            ),
             Container(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 30),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [const Color(0xFF0079C3), indramayuBlue],
+              key: const Key('home-photo-header'),
+              constraints: BoxConstraints(
+                minHeight: (MediaQuery.sizeOf(context).width * .75).clamp(
+                  240,
+                  320,
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        if (_isLoggedIn) ...[
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedIndex = 3;
-                              });
-                            },
-                            child: Container(
-                              height: 46,
-                              width: 46,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.5),
-                                  width: 2,
-                                ),
-                                color: Colors.white.withOpacity(0.2),
-                              ),
-                              child: _fotoProfil.isEmpty
-                                  ? const Icon(
-                                      Icons.person,
-                                      color: Colors.white,
-                                      size: 28,
-                                    )
-                                  : ClipOval(
-                                      child: Image.network(
-                                        _fotoProfil,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, _, _) => const Icon(
-                                          Icons.person,
-                                          color: Colors.white,
-                                          size: 28,
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/images/home/samudera_hero.jpg'),
+                  fit: BoxFit.cover,
+                  alignment: Alignment.centerRight,
+                ),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Material(
+                        color: Colors.black.withValues(alpha: .55),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Image.asset(
+                                    samuderaLogoAsset,
+                                    width: 94,
+                                    height: 94,
+                                    fit: BoxFit.contain,
+                                    semanticLabel: 'Logo SAMUDERA',
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'SAMUDERA',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleLarge
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w800,
+                                                color: Colors.white,
+                                              ),
                                         ),
-                                      ),
+                                        Text(
+                                          _isLoggedIn
+                                              ? 'Hallo, $_userName '
+                                              : 'Selamat datang',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        const Text(
+                                          'Kabupaten Indramayu',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ],
                                     ),
+                                  ),
+                                  IconButton(
+                                    color: Colors.white,
+                                    tooltip: _isLoggedIn
+                                        ? 'Notifikasi'
+                                        : 'Login',
+                                    onPressed: () => _openPage(
+                                      _isLoggedIn
+                                          ? NotifikasiScreen(api: _apiService)
+                                          : const LoginScreen(),
+                                    ),
+                                    icon: Icon(
+                                      _isLoggedIn
+                                          ? Icons.notifications_outlined
+                                          : Icons.login,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (_isLoggedIn)
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: IconButton(
+                                    color: Colors.white,
+                                    tooltip: 'Profil saya',
+                                    onPressed: () =>
+                                        setState(() => _selectedIndex = 3),
+                                    icon: _fotoProfil.isEmpty
+                                        ? const Icon(Icons.person_outline)
+                                        : ClipOval(
+                                            child: Image.network(
+                                              _fotoProfil,
+                                              width: 32,
+                                              height: 32,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, error, stack) =>
+                                                  const Icon(
+                                                    Icons.person_outline,
+                                                  ),
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 48),
+                      Material(
+                        color: Colors.black.withValues(alpha: .55),
+                        borderRadius: BorderRadius.circular(12),
+                        child: TextField(
+                          key: const Key('home-search'),
+                          focusNode: _searchFocus,
+                          readOnly: true,
+                          style: const TextStyle(color: Colors.white),
+                          cursorColor: Colors.white,
+                          onTap: _openCatalog,
+                          decoration: const InputDecoration(
+                            labelText: 'Cari layanan SAMUDERA',
+                            labelStyle: TextStyle(color: Colors.white),
+                            hintStyle: TextStyle(color: Colors.white),
+                            prefixIcon: Icon(Icons.search, color: Colors.white),
+                            filled: false,
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: Colors.white70),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Colors.white,
+                                width: 2,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                        ],
-
-                        Expanded(
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _heading('Layanan utama'),
+                  ServiceGrid(
+                    services: services
+                        .where((s) => s.group == ServiceGroup.primary)
+                        .toList(),
+                  ),
+                  const SizedBox(height: 24),
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 16,
+                    children: [
+                      Text(
+                        'Layanan untukmu',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      TextButton(
+                        onPressed: _openCatalog,
+                        child: const Text('Lihat semua'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ServiceGrid(
+                    services: [
+                      ...services.where(
+                        (s) => s.group == ServiceGroup.secondary,
+                      ),
+                      HomeService(
+                        id: 'all',
+                        label: 'Semua Layanan',
+                        group: ServiceGroup.secondary,
+                        order: 7,
+                        requiresSession: false,
+                        onTap: _openCatalog,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Card(
+                    color: const Color(0xFF009FE3),
+                    surfaceTintColor: Colors.transparent,
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(16),
+                      leading: Image.asset(
+                        'assets/icons/services/sos.png',
+                        width: 48,
+                        height: 48,
+                        excludeFromSemantics: true,
+                      ),
+                      title: Text(
+                        'SOS Bahari / Lapor Darurat',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Buka formulir laporan. Tidak mengirim otomatis.',
+                        style: const TextStyle(color: Colors.black),
+                      ),
+                      onTap: () {
+                        if (!_routeOpen) _openSos();
+                      },
+                    ),
+                  ),
+                  _heading('Cari Layanan Sesuai Kebutuhanmu'),
+                  PersonaChoices(
+                    onSelected: (persona) => _openDiscovery(
+                      PersonaDetailScreen(persona: persona, services: services),
+                    ),
+                  ),
+                  _heading('Mendukung Pembudidaya'),
+                  SupportBanners(
+                    initialPaused: _supportPaused,
+                    onPausedChanged: (paused) => _supportPaused = paused,
+                    onSelected: (index) => _openPage(switch (index) {
+                      0 => AnalysisScreen(api: _apiService),
+                      1 => PasarScreen(api: _apiService),
+                      2 => ForumScreen(api: _apiService),
+                      _ => const ConsultationScreen(),
+                    }),
+                  ),
+                  _heading('Panduan Aplikasi'),
+                  SizedBox(
+                    height: 210 + MediaQuery.textScalerOf(context).scale(230),
+                    child: PageView.builder(
+                      controller: _bannerController,
+                      itemCount: appGuides.length,
+                      onPageChanged: (index) =>
+                          setState(() => _currentBannerIndex = index),
+                      itemBuilder: (context, index) => Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: GuideBanner(
+                          guide: appGuides[index],
+                          onTap: () => _openDiscovery(
+                            AppGuideScreen(guide: appGuides[index]),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      IconButton(
+                        tooltip: 'Banner sebelumnya',
+                        onPressed: () => _bannerController.previousPage(
+                          duration: MediaQuery.disableAnimationsOf(context)
+                              ? Duration.zero
+                              : const Duration(milliseconds: 250),
+                          curve: Curves.easeInOut,
+                        ),
+                        icon: const Icon(Icons.chevron_left),
+                      ),
+                      Text('${_currentBannerIndex + 1} / ${appGuides.length}'),
+                      IconButton(
+                        tooltip: 'Banner berikutnya',
+                        onPressed: () => _bannerController.nextPage(
+                          duration: MediaQuery.disableAnimationsOf(context)
+                              ? Duration.zero
+                              : const Duration(milliseconds: 250),
+                          curve: Curves.easeInOut,
+                        ),
+                        icon: const Icon(Icons.chevron_right),
+                      ),
+                    ],
+                  ),
+                  _heading('Berita & wawasan'),
+                  Card(
+                    color: const Color(0xFF009FE3),
+                    surfaceTintColor: Colors.transparent,
+                    child: ListTile(
+                      textColor: Colors.black,
+                      leading: Image.asset(
+                        'assets/icons/services/berita.png',
+                        width: 40,
+                        height: 40,
+                        excludeFromSemantics: true,
+                      ),
+                      title: const Text('Info Diskanla & Umum Terkini'),
+                      subtitle: const Text(
+                        'Info penyuluhan & berita perikanan',
+                      ),
+                      onTap: () => _openPage(BeritaScreen(api: _apiService)),
+                    ),
+                  ),
+                  HomeNewsPreview(api: _apiService, openPage: _openPage),
+                  _heading('Analisa Komoditas'),
+                  TextButton(
+                    onPressed: () =>
+                        _openPage(SemuaKomoditasScreen(api: _apiService)),
+                    child: const Text('Semua komoditas'),
+                  ),
+                  ReferenceListBuilder(
+                    future: _fishList,
+                    retry: () => _loadReference(_apiService.fetchFishTypes),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20.0),
+                            child: CircularProgressIndicator(
+                              color: const Color(0xFF009FE3),
+                            ),
+                          ),
+                        );
+                      } else if (snapshot.hasError) {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 24),
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.errorContainer,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                _isLoggedIn
-                                    ? "Hallo, $_userName "
-                                    : "Diskanla Indramayu",
-                                style: GoogleFonts.poppins(
-                                  color: Colors.white.withOpacity(0.9),
-                                  fontSize: 13,
-                                  letterSpacing: 0.5,
-                                ),
+                              Icon(
+                                Icons.error_outline,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onErrorContainer,
+                                size: 30,
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 10),
                               Text(
-                                "AQUARA",
+                                "Gagal terhubung ke Server.",
+                                textAlign: TextAlign.center,
                                 style: GoogleFonts.poppins(
-                                  color: Colors.white,
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onErrorContainer,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      if (_isLoggedIn) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const NotifikasiScreen(),
-                          ),
                         );
-                      } else {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LoginScreen(),
+                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return Center(
+                          child: Text(
+                            "Belum ada data ikan.",
+                            style: GoogleFonts.poppins(),
                           ),
                         );
                       }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _isLoggedIn
-                                ? Icons.notifications_outlined
-                                : Icons.login,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          if (!_isLoggedIn) ...[
-                            const SizedBox(width: 6),
-                            Text(
-                              "Login",
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
 
-            const SizedBox(height: 24),
-
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    "Mendukung Pembudidaya",
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Stack(
-                  alignment: Alignment.bottomCenter,
-                  children: [
-                    SizedBox(
-                      height: 160,
-                      child: PageView.builder(
-                        controller: _bannerController,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentBannerIndex = index;
-                          });
-                        },
-                        itemCount: _bannerImages.length,
+                      return ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: snapshot.data!.length > 2
+                            ? 2
+                            : snapshot.data!.length,
                         itemBuilder: (context, index) {
+                          var ikan = snapshot.data![index];
+                          String nama = ikan['name'] ?? 'Tanpa Nama';
+                          String fcr = ikan['fcr_ratio']?.toString() ?? '-';
+                          String panen =
+                              ikan['harvest_duration_days']?.toString() ?? '-';
+                          var harga = ikan['market_price_per_kg'];
+                          String? imageUrl = ikan['image_url'];
+
                           return GestureDetector(
                             onTap: () {
-                              if (index == 0) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const AnalysisScreen(),
-                                  ),
-                                );
-                              } else if (index == 1) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const PasarScreen(),
-                                  ),
-                                );
-                              } else if (index == 2) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const ForumScreen(),
-                                  ),
-                                );
-                              } else if (index == 3) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const ConsultationScreen(),
-                                  ),
-                                );
-                              }
+                              _openPage(
+                                AnalysisScreen(
+                                  api: _apiService,
+                                  autoFishName: nama,
+                                  autoPrice: harga.toString(),
+                                  autoFcr: fcr,
+                                  autoPeriod: panen,
+                                ),
+                              );
                             },
-                            child: Container(
-                              margin: const EdgeInsets.only(right: 12),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                                image: DecorationImage(
-                                  image: AssetImage(_bannerImages[index]),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
-                                  gradient: LinearGradient(
-                                    begin: Alignment.bottomCenter,
-                                    end: Alignment.topCenter,
-                                    colors: [
-                                      Colors.black.withOpacity(0.6),
-                                      Colors.transparent,
-                                    ],
-                                  ),
-                                ),
-                                padding: const EdgeInsets.only(
-                                  left: 16,
-                                  right: 16,
-                                  bottom: 40,
-                                ),
-                                alignment: Alignment.bottomLeft,
-                                child: Text(
-                                  _bannerTitles[index],
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: CommodityCard(
+                                name: nama,
+                                specs: "FCR $fcr • Panen $panen Hari",
+                                price: formatRupiah(harga),
+                                imageUrl: imageUrl,
+                                home: true,
                               ),
                             ),
                           );
                         },
-                      ),
-                    ),
-
-                    Positioned(
-                      bottom: 12,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.4),
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                            _bannerImages.length,
-                            (index) => AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              margin: const EdgeInsets.symmetric(horizontal: 3),
-                              height: 6,
-                              width: _currentBannerIndex == index ? 20 : 6,
-                              decoration: BoxDecoration(
-                                color: _currentBannerIndex == index
-                                    ? Colors.white
-                                    : Colors.white.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Layanan Utama",
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  GridView(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 15,
-                      mainAxisSpacing: 18,
-                      childAspectRatio: 0.80,
-                      mainAxisExtent:
-                          MediaQuery.textScalerOf(context).scale(1) > 1
-                          ? 80 + 66 * MediaQuery.textScalerOf(context).scale(1)
-                          : null,
-                    ),
-                    children: [
-                      _buildMenuIcon(
-                        context,
-                        "Analisa Usaha",
-                        'assets/analisa usaha.png',
-                        indramayuGreen,
-                        indramayuGreen.withOpacity(0.1),
-                      ),
-                      _buildMenuIcon(
-                        context,
-                        "Harga Pasar",
-                        'assets/harga pasar.png',
-                        Colors.orange,
-                        Colors.orange.withOpacity(0.1),
-                      ),
-                      _buildMenuIcon(
-                        context,
-                        "Katalog Ikan",
-                        'assets/katalog ikan.png',
-                        Colors.blueAccent,
-                        Colors.blueAccent.withOpacity(0.1),
-                      ),
-                      _buildMenuIcon(
-                        context,
-                        "Forum",
-                        'assets/forum.png',
-                        Colors.purple,
-                        Colors.purple.withOpacity(0.1),
-                      ),
-                      _buildMenuIcon(
-                        context,
-                        "Konsultasi",
-                        'assets/konsultasi.png',
-                        Colors.teal,
-                        Colors.teal.withOpacity(0.1),
-                      ),
-                      _buildMenuIcon(
-                        context,
-                        "Info Dinas",
-                        'assets/dinas.png',
-                        indramayuBlue,
-                        indramayuBlue.withOpacity(0.1),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                spacing: 16,
-                runSpacing: 8,
-                children: [
-                  Text(
-                    "Analisa Komoditas",
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SemuaKomoditasScreen(),
-                        ),
                       );
                     },
-                    child: Text(
-                      "Lihat Semua",
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: indramayuBlue,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+                  TextButton(
+                    onPressed: () => _openPage(const IconCreditsScreen()),
+                    child: const Text('Kredit ilustrasi'),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            ReferenceListBuilder(
-              future: _fishList,
-              retry: () => _loadReference(_apiService.fetchFishTypes),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: CircularProgressIndicator(color: indramayuBlue),
-                    ),
-                  );
-                } else if (snapshot.hasError) {
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.red[50],
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          color: Colors.red,
-                          size: 30,
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          "Gagal terhubung ke Server.",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(
-                    child: Text(
-                      "Belum ada data ikan.",
-                      style: GoogleFonts.poppins(),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: snapshot.data!.length > 2
-                      ? 2
-                      : snapshot.data!.length,
-                  itemBuilder: (context, index) {
-                    var ikan = snapshot.data![index];
-                    String nama = ikan['name'] ?? 'Tanpa Nama';
-                    String fcr = ikan['fcr_ratio']?.toString() ?? '-';
-                    String panen =
-                        ikan['harvest_duration_days']?.toString() ?? '-';
-                    var harga = ikan['market_price_per_kg'];
-                    String? imageUrl = ikan['image_url'];
-
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => AnalysisScreen(
-                              autoFishName: nama,
-                              autoPrice: harga.toString(),
-                              autoFcr: fcr,
-                              autoPeriod: panen,
-                            ),
-                          ),
-                        );
-                      },
-                      child: _buildCommodityCard(
-                        nama,
-                        "FCR $fcr • Panen $panen Hari",
-                        formatRupiah(harga),
-                        indramayuBlue,
-                        imageUrl,
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-
-            const SizedBox(height: 24),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const BeritaScreen(),
-                    ),
-                  );
-                },
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 130),
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [const Color(0xFF0079C3), indramayuBlue],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: indramayuBlue.withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        right: -20,
-                        top: -20,
-                        child: CircleAvatar(
-                          radius: 60,
-                          backgroundColor: Colors.white.withOpacity(0.1),
-                        ),
-                      ),
-                      Positioned(
-                        right: 40,
-                        bottom: -30,
-                        child: CircleAvatar(
-                          radius: 40,
-                          backgroundColor: Colors.white.withOpacity(0.1),
-                        ),
-                      ),
-
-                      Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: const Icon(
-                                Icons.campaign_outlined,
-                                color: Colors.white,
-                                size: 32,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-
-                            Expanded(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    "Info Diskanla & Umum Terkini",
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    "Info penyuluhan & berita perikanan",
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white.withOpacity(0.8),
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const Icon(
-                              Icons.arrow_forward_ios,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 30),
           ],
         ),
       ),
@@ -809,227 +919,64 @@ class _HomeScreenState extends State<_HomeScreenContent>
 
   @override
   Widget build(BuildContext context) {
-    final indramayuBlue = const Color(0xFF009FE3);
-    final indramayuGreen = const Color(0xFF8CC63F);
-
-    final List<Widget> pages = [
-      _buildBeranda(indramayuBlue, indramayuGreen),
-      const BeritaScreen(),
-      const PasarScreen(),
+    final pages = [
+      _buildBeranda(),
+      BeritaScreen(api: _apiService),
+      PasarScreen(api: _apiService),
       _isLoggedIn ? ProfilScreen(api: _apiService) : const LoginScreen(),
     ];
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
       body: pages[_selectedIndex],
+      floatingActionButton: _selectedIndex == 0
+          ? GombyangButton(
+              key: const Key('home-asisten'),
+              onPressed: () =>
+                  _openPage(AsistenSamuderaScreen(api: _apiService)),
+            )
+          : null,
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
+        currentIndex: _selectedIndex < 2 ? _selectedIndex : _selectedIndex + 1,
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF009FE3),
+        showUnselectedLabels: true,
         onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
+          if (index == 2) {
+            _openSosCamera();
+            return;
+          }
+          if (_sosOpen || _routeOpen || _catalogOpen || _externalInfoOpen) {
+            return;
+          }
+          setState(() => _selectedIndex = index < 2 ? index : index - 1);
           _checkLoginStatus();
         },
-        selectedItemColor: indramayuBlue,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Beranda"),
-          BottomNavigationBarItem(icon: Icon(Icons.newspaper), label: "Berita"),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Beranda'),
+          BottomNavigationBarItem(icon: Icon(Icons.newspaper), label: 'Berita'),
+          BottomNavigationBarItem(
+            icon: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Color(0xFFF7941D),
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(10),
+                child: Icon(
+                  Icons.add_a_photo_outlined,
+                  key: Key('sos-camera'),
+                  color: Colors.black,
+                ),
+              ),
+            ),
+            label: 'SOS',
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.shopping_bag_outlined),
-            label: "Pasar",
+            label: 'Pasar',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
-            label: "Profil",
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenuIcon(
-    BuildContext context,
-    String title,
-    String imagePath,
-    Color shadowColor,
-    Color bgColor,
-  ) {
-    return InkWell(
-      onTap: () {
-        if (title == "Analisa Usaha") {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AnalysisScreen()),
-          );
-        } else if (title == "Katalog Ikan") {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const CatalogScreen()),
-          );
-        } else if (title == "Harga Pasar") {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const MarketPriceScreen()),
-          );
-        } else if (title == "Info Dinas") {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const InfoDinasScreen()),
-          );
-        } else if (title == "Forum") {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const ForumScreen()),
-          );
-        } else if (title == "Konsultasi") {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const ConsultationScreen()),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Fitur $title sedang dikembangkan!")),
-          );
-        }
-      },
-      child: Column(
-        children: [
-          Container(
-            height: 64,
-            width: 64,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [bgColor, bgColor.withOpacity(0.3)],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: shadowColor.withOpacity(0.15),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Image.asset(imagePath, fit: BoxFit.contain),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCommodityCard(
-    String name,
-    String specs,
-    String price,
-    Color accentColor,
-    String? imageUrl,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12, left: 24, right: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF009FE3).withOpacity(0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            height: 54,
-            width: 54,
-            decoration: BoxDecoration(
-              color: accentColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: imageUrl != null && imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Icon(Icons.water_drop, color: accentColor);
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            value: loadingProgress.expectedTotalBytes != null
-                                ? loadingProgress.cumulativeBytesLoaded /
-                                      loadingProgress.expectedTotalBytes!
-                                : null,
-                          ),
-                        );
-                      },
-                    )
-                  : Icon(Icons.water_drop, color: accentColor),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: GoogleFonts.poppins(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  specs,
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: Colors.grey[500],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                "Harga Pasar",
-                style: GoogleFonts.poppins(fontSize: 9, color: Colors.grey),
-              ),
-              Text(
-                price,
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: accentColor,
-                ),
-              ),
-            ],
+            label: 'Profil',
           ),
         ],
       ),

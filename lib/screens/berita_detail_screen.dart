@@ -1,3 +1,4 @@
+import '../widgets/samudera_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/session_boundary.dart';
@@ -32,7 +33,7 @@ class BeritaDetailScreen extends StatelessWidget {
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
             color: Colors.white,
-            fontSize: 18,
+            fontSize: 20,
           ),
         ),
         backgroundColor: const Color(0xFF009FE3),
@@ -111,8 +112,8 @@ class BeritaDetailScreen extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: 250,
-      color: Colors.blue[50],
-      child: Icon(Icons.image_outlined, size: 80, color: Colors.blue[200]),
+      color: SamuderaColors.blue,
+      child: Icon(Icons.image_outlined, size: 80, color: SamuderaColors.blue),
     );
   }
 }

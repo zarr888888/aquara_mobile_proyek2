@@ -1,0 +1,155 @@
+[
+  {
+    "id": "2962235",
+    "label": "Analisa Usaha",
+    "filename": "analisa_usaha.png",
+    "target_asset": "assets/icons/services/analisa_usaha.png",
+    "page_url": "https://www.flaticon.com/free-icon/computer-graphic_2962235",
+    "author": "AB Design",
+    "style": "Flat",
+    "services": [
+      "Analisa Usaha"
+    ],
+    "license": "Flaticon License, attribution required as listed on source page",
+    "checked_on": "2026-10-18",
+    "download_status": "to_be_downloaded_by_user_from_official_page"
+  },
+  {
+    "id": "6044130",
+    "label": "Pasar Ikan",
+    "filename": "pasar.png",
+    "target_asset": "assets/icons/services/pasar.png",
+    "page_url": "https://www.flaticon.com/free-icon/fish-market_6044130",
+    "author": "Magnific",
+    "style": "Flat",
+    "services": [
+      "Pasar Ikan"
+    ],
+    "license": "Flaticon License, attribution required as listed on source page",
+    "checked_on": "2026-10-18",
+    "download_status": "to_be_downloaded_by_user_from_official_page"
+  },
+  {
+    "id": "3111276",
+    "label": "Katalog Ikan",
+    "filename": "katalog_ikan.png",
+    "target_asset": "assets/icons/services/katalog_ikan.png",
+    "page_url": "https://www.flaticon.com/free-icon/fish_3111276",
+    "author": "smalllikeart",
+    "style": "Flat",
+    "services": [
+      "Katalog Ikan"
+    ],
+    "license": "Flaticon License, attribution required as listed on source page",
+    "checked_on": "2026-10-18",
+    "download_status": "to_be_downloaded_by_user_from_official_page"
+  },
+  {
+    "id": "943706",
+    "label": "Forum Komunitas / Forum Saya",
+    "filename": "forum.png",
+    "target_asset": "assets/icons/services/forum.png",
+    "page_url": "https://www.flaticon.com/free-icon/forum_943706",
+    "author": "Smashicons",
+    "style": "Flat",
+    "services": [
+      "Forum Komunitas",
+      "Forum Saya"
+    ],
+    "license": "Flaticon License, attribution required as listed on source page",
+    "checked_on": "2026-10-18",
+    "download_status": "to_be_downloaded_by_user_from_official_page"
+  },
+  {
+    "id": "2962344",
+    "label": "Info KKP / Berita / Info Dinas",
+    "filename": "informasi.png",
+    "target_asset": "assets/icons/services/informasi.png",
+    "page_url": "https://www.flaticon.com/free-icon/report_2962344",
+    "author": "AB Design",
+    "style": "Flat",
+    "services": [
+      "Info KKP",
+      "Berita",
+      "Info Dinas"
+    ],
+    "license": "Flaticon License, attribution required as listed on source page",
+    "checked_on": "2026-10-18",
+    "download_status": "to_be_downloaded_by_user_from_official_page"
+  },
+  {
+    "id": "774659",
+    "label": "Cuaca",
+    "filename": "cuaca.png",
+    "target_asset": "assets/icons/services/cuaca.png",
+    "page_url": "https://www.flaticon.com/free-icon/cloudy_774659",
+    "author": "Smashicons",
+    "style": "Flat",
+    "services": [
+      "Cuaca"
+    ],
+    "license": "Flaticon License, attribution required as listed on source page",
+    "checked_on": "2026-10-18",
+    "download_status": "to_be_downloaded_by_user_from_official_page"
+  },
+  {
+    "id": "1979713",
+    "label": "Daftar TPI",
+    "filename": "tpi.png",
+    "target_asset": "assets/icons/services/tpi.png",
+    "page_url": "https://www.flaticon.com/free-icon/fishing-boat_1979713",
+    "author": "Smashicons",
+    "style": "Flat",
+    "services": [
+      "Daftar TPI"
+    ],
+    "license": "Flaticon License, attribution required as listed on source page",
+    "checked_on": "2026-10-18",
+    "download_status": "to_be_downloaded_by_user_from_official_page"
+  },
+  {
+    "id": "2962247",
+    "label": "Pesanan Grosir",
+    "filename": "pesanan.png",
+    "target_asset": "assets/icons/services/pesanan.png",
+    "page_url": "https://www.flaticon.com/free-icon/clipboard_2962247",
+    "author": "AB Design",
+    "style": "Flat",
+    "services": [
+      "Pesanan Grosir"
+    ],
+    "license": "Flaticon License, attribution required as listed on source page",
+    "checked_on": "2026-10-18",
+    "download_status": "to_be_downloaded_by_user_from_official_page"
+  },
+  {
+    "id": "6256546",
+    "label": "Analisis Foto",
+    "filename": "analisis_foto.png",
+    "target_asset": "assets/icons/services/analisis_foto.png",
+    "page_url": "https://www.flaticon.com/free-icon/camera_6256546",
+    "author": "Smashicons",
+    "style": "Flat",
+    "services": [
+      "Analisis Foto"
+    ],
+    "license": "Flaticon License, attribution required as listed on source page",
+    "checked_on": "2026-10-18",
+    "download_status": "to_be_downloaded_by_user_from_official_page"
+  },
+  {
+    "id": "3111351",
+    "label": "SOS Bahari",
+    "filename": "sos.png",
+    "target_asset": "assets/icons/services/sos.png",
+    "page_url": "https://www.flaticon.com/free-icon/lifebuoy_3111351",
+    "author": "smalllikeart",
+    "style": "Flat",
+    "services": [
+      "SOS Bahari"
+    ],
+    "license": "Flaticon License, attribution required as listed on source page",
+    "checked_on": "2026-10-18",
+    "download_status": "to_be_downloaded_by_user_from_official_page"
+  }
+]

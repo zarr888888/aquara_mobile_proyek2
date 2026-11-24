@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show HttpDate;
+import 'dart:io' show HttpDate, HttpClient, SecurityContext;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 
 import 'api_result.dart';
 import 'session_service.dart';
@@ -25,7 +27,7 @@ class ApiClient {
     DateTime Function()? clock,
   }) : _baseUrl = _validateBase(baseUrl),
        _session = session ?? SessionService.instance,
-       _clientFactory = clientFactory ?? http.Client.new,
+       _clientFactory = clientFactory ?? (() => _transport(baseUrl)),
        _clock = clock ?? DateTime.now {
     if (timeout <= Duration.zero || maxResponseBytes <= 0) {
       throw ArgumentError('Batas request harus lebih besar dari nol.');
@@ -36,6 +38,19 @@ class ApiClient {
   final SessionService _session;
   final http.Client Function() _clientFactory;
   final DateTime Function() _clock;
+
+  static http.Client _transport(Uri base) {
+    const cert = String.fromEnvironment('SAMUDERA_GOMBYANG_DEBUG_CERT');
+    if (kDebugMode &&
+        cert.isNotEmpty &&
+        base.toString() == 'https://127.0.0.1:19458/api') {
+      final context = SecurityContext(withTrustedRoots: false)
+        ..setTrustedCertificatesBytes(base64Decode(cert));
+      return IOClient(HttpClient(context: context));
+    }
+    return http.Client();
+  }
+
   final Duration timeout;
   final int maxResponseBytes;
 
@@ -56,7 +71,13 @@ class ApiClient {
   static const _privateOtpPaths = {'ubah-kontak', 'hapus-akun'};
 
   static Uri _validateBase(Uri uri) {
-    if (uri.scheme != 'https' ||
+    const demoBase = 'http://127.0.0.1:18746/api';
+    const demoEnabled =
+        kDebugMode &&
+        bool.fromEnvironment('SAMUDERA_SOS_DEMO') &&
+        String.fromEnvironment('SAMUDERA_API_URL') == demoBase;
+    if ((uri.scheme != 'https' &&
+            !(demoEnabled && uri.toString() == demoBase)) ||
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty ||
         uri.hasQuery ||
@@ -300,6 +321,18 @@ class ApiClient {
         );
       }
       return ApiResult.success(data: payload, statusCode: status);
+    }
+    // Only expose allowlisted weather states, never raw upstream errors.
+    if (path == 'info/cuaca' &&
+        status == 503 &&
+        payload is Map &&
+        payload['data'] is Map) {
+      final message = switch (payload['data']['status']) {
+        'expired' => 'Prakiraan kedaluwarsa.',
+        'empty' => 'Belum ada prakiraan.',
+        _ => 'Layanan cuaca tidak tersedia.',
+      };
+      return _failure(ApiErrorKind.server, message, status: status);
     }
     return _httpFailure(response, payload);
   }

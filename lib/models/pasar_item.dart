@@ -1,4 +1,5 @@
 import 'reference_data.dart';
+import 'profile_summary.dart';
 
 const pasarCategories = ['tawar', 'laut', 'olahan'];
 const pasarSaleTypes = ['eceran', 'grosir'];
@@ -47,6 +48,10 @@ Map<String, dynamic> parsePasarItem(Object? raw) {
   final price = pasarInteger(raw['harga']);
   if (price == null) throw const FormatException();
   result['harga'] = price;
+  result['satuan_jual'] =
+      const ['kg', 'ekor', 'kemasan'].contains(raw['satuan_jual'])
+      ? raw['satuan_jual']
+      : null;
   result['stok'] = pasarInteger(raw['stok']);
   result['user_id'] = raw['user_id'] is int && raw['user_id'] > 0
       ? raw['user_id']
@@ -62,6 +67,7 @@ Map<String, dynamic> parsePasarItem(Object? raw) {
         : null;
   }
   final user = raw['user'];
+  result['profile'] = profileRelation(user, raw['user_id']);
   result['user'] = user is Map && user['name'] is String
       ? {'name': user['name']}
       : null;

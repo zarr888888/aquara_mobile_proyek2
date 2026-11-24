@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:aquara_mobile/screens/auth_form_screen.dart';
 import 'package:aquara_mobile/screens/login_screen.dart';
 import 'package:aquara_mobile/screens/register_screen.dart';
 import 'package:aquara_mobile/screens/otp_screen.dart';
@@ -51,6 +52,111 @@ class FakeAuthApi extends ApiService {
 }
 
 void main() {
+  for (final mode in AuthFormMode.values) {
+    for (final brightness in Brightness.values) {
+      testWidgets(
+        '$mode $brightness 320px text 2x keyboard: reachable controls without overflow',
+        (tester) async {
+          tester.view.physicalSize = const Size(320, 800);
+          tester.view.devicePixelRatio = 1;
+          tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetViewInsets);
+          final api = FakeAuthApi();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: ThemeData(brightness: brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(2)),
+                child: child!,
+              ),
+              home: AuthFormScreen(mode: mode, api: api),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final reset = mode == AuthFormMode.reset;
+          expect(
+            find.text('Metode login lainnya'),
+            reset ? findsNothing : findsOneWidget,
+          );
+          if (reset) {
+            expect(find.text('Reset kata sandi'), findsOneWidget);
+            expect(find.byType(Image), findsNothing);
+            final input = tester.widget<TextField>(
+              find.byType(TextField).first,
+            );
+            expect(input.decoration!.prefixIcon, isNull);
+            expect(find.byType(LayoutBuilder), findsNothing);
+          } else {
+            final fieldContext = tester.element(
+              find.byType(TextFormField).first,
+            );
+            final border =
+                Theme.of(fieldContext).inputDecorationTheme.border
+                    as OutlineInputBorder;
+            expect(border.borderRadius, BorderRadius.circular(16));
+            expect(
+              Theme.of(
+                fieldContext,
+              ).filledButtonTheme.style!.backgroundColor!.resolve({}),
+              mode == AuthFormMode.register
+                  ? const Color(0xFF8CC63F)
+                  : const Color(0xFF009FE3),
+            );
+          }
+          final submit = find.byType(FilledButton);
+          await tester.ensureVisible(submit);
+          await tester.pumpAndSettle();
+          expect(submit.hitTestable(), findsOneWidget);
+          if (!reset) {
+            expect(tester.getSize(submit).height, greaterThanOrEqualTo(55));
+          }
+          await tester.tap(submit);
+          await tester.pumpAndSettle();
+          expect(api.loginCalls + api.registerCalls, 0);
+          for (final control
+              in tester
+                  .widgetList(
+                    find.byWidgetPredicate(
+                      (w) => w is OutlinedButton || w is TextButton,
+                    ),
+                  )
+                  .toList()) {
+            final finder = find.byWidget(control);
+            await tester.ensureVisible(finder);
+            await tester.pumpAndSettle();
+            expect(finder.hitTestable(), findsOneWidget);
+          }
+          expect(tester.takeException(), isNull);
+          if (reset) {
+            final dropdown = find.byType(DropdownButtonFormField<String>);
+            expect(tester.state<FormFieldState<String>>(dropdown).value, 'wa');
+            for (final channel in ['Email', 'WhatsApp']) {
+              await tester.ensureVisible(dropdown);
+              await tester.pumpAndSettle();
+              expect(dropdown.hitTestable(), findsOneWidget);
+              await tester.tap(dropdown);
+              await tester.pumpAndSettle();
+              final option = find.text(channel).last;
+              expect(option.hitTestable(), findsOneWidget);
+              await tester.tap(option);
+              await tester.pumpAndSettle();
+              expect(
+                tester.state<FormFieldState<String>>(dropdown).value,
+                channel == 'Email' ? 'email' : 'wa',
+              );
+              expect(tester.takeException(), isNull);
+            }
+          }
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
   testWidgets(
     'login validates input, prevents duplicate submission, shows 401',
     (tester) async {
@@ -139,6 +245,57 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('403 still opens registration OTP and clears password', (
+    tester,
+  ) async {
+    final api = FakeAuthApi()
+      ..response = ApiResult.failure(
+        ApiFailure(
+          kind: ApiErrorKind.unauthorized,
+          message: 'Verifikasi diperlukan.',
+        ),
+        statusCode: 403,
+      );
+    await tester.pumpWidget(MaterialApp(home: LoginScreen(api: api)));
+    await tester.enterText(find.byType(TextFormField).first, 'budi@test.id');
+    await tester.enterText(find.byType(TextFormField).last, 'secret123');
+    final password = tester
+        .widget<TextField>(find.byType(TextField).last)
+        .controller!;
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Masuk'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Masuk'));
+    await tester.pumpAndSettle();
+    expect(api.loginCalls, 1);
+    expect(
+      tester.widget<OtpScreen>(find.byType(OtpScreen)).purpose,
+      OtpPurpose.register,
+    );
+    expect(password.text, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('successful login keeps callback and clears password', (
+    tester,
+  ) async {
+    var calls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LoginScreen(api: FakeAuthApi(), onAuthenticated: () => calls++),
+      ),
+    );
+    await tester.enterText(find.byType(TextFormField).first, 'budi@test.id');
+    await tester.enterText(find.byType(TextFormField).last, 'secret123');
+    final password = tester
+        .widget<TextField>(find.byType(TextField).last)
+        .controller!;
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Masuk'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Masuk'));
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(password.text, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('429 disables login and displays wait', (tester) async {
     final api = FakeAuthApi()
       ..response = ApiResult.failure(

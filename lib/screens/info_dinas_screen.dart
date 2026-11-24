@@ -1,3 +1,4 @@
+import '../widgets/samudera_theme.dart';
 import '../widgets/reference_list_builder.dart';
 import '../services/api_result.dart';
 import '../services/session_service.dart';
@@ -139,7 +140,7 @@ class _InfoDinasScreenState extends State<_InfoDinasScreenContent>
                       child: _buildLinkButton(
                         "Pemprov Jabar",
                         Icons.apartment,
-                        Colors.orange,
+                        SamuderaColors.orange,
                         "https://jabarprov.go.id", // Ganti link asli
                       ),
                     ),

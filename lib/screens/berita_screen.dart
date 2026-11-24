@@ -1,3 +1,5 @@
+import '../widgets/samudera_theme.dart';
+import '../widgets/feature_tabs.dart';
 import '../widgets/reference_list_builder.dart';
 import '../services/api_result.dart';
 import '../services/session_service.dart';
@@ -8,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart'; // 🚀 FITUR BARU BUKA BROWSER
 import '../services/api_service.dart';
 import 'berita_detail_screen.dart';
+import '../widgets/home_services.dart';
 
 class BeritaScreen extends StatelessWidget {
   const BeritaScreen({super.key, this.api});
@@ -97,6 +100,7 @@ class _BeritaScreenState extends State<_BeritaScreenContent>
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
+        actions: [ContentSearchAction(api: _apiService)],
         title: Text(
           'Berita & Informasi',
           style: GoogleFonts.poppins(
@@ -106,21 +110,9 @@ class _BeritaScreenState extends State<_BeritaScreenContent>
         ),
         backgroundColor: const Color(0xFF009FE3),
         elevation: 0,
-        bottom: TabBar(
+        bottom: FeatureTabs(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          indicatorWeight: 4,
-          labelStyle: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
-          unselectedLabelStyle: GoogleFonts.poppins(
-            fontWeight: FontWeight.normal,
-          ),
-          tabs: const [
-            Tab(text: 'Info Diskanla'),
-            Tab(text: 'Kementerian & Umum'),
-          ],
+          labels: const ['Info Diskanla', 'Kementerian & Umum'],
         ),
       ),
       body: TabBarView(
@@ -344,14 +336,17 @@ class _BeritaScreenState extends State<_BeritaScreenContent>
     return Container(
       height: 180,
       width: double.infinity,
-      color: Colors.blue[50],
+      color: SamuderaColors.blue,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.image_outlined, size: 50, color: Colors.blue[200]),
+          Icon(Icons.image_outlined, size: 50, color: SamuderaColors.blue),
           Text(
             "Memuat foto...",
-            style: GoogleFonts.poppins(color: Colors.blue[300], fontSize: 12),
+            style: GoogleFonts.poppins(
+              color: SamuderaColors.blue,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
