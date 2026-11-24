@@ -125,7 +125,7 @@ jobs:
           PY
 
       - name: 🏗️ Build APK Release
-        run: flutter build apk --release --split-per-abi
+        run: flutter build apk --release --split-per-abi --dart-define=SAMUDERA_API_URL=https://samudera.aquara.app/api
 
       - name: 📤 Kirim APK ke Telegram
         shell: bash
